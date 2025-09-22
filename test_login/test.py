@@ -84,6 +84,37 @@ def login_signup_page():
             except Exception as e:
                 st.error(f"サインアップに失敗しました:{str(e)}")
 
+#メイン画面
 
-login_signup_page()
+def main_app():
+    st.title("メインアプリケーション")
+    st.write(f"ようこそ、{st.session_state.user.email}さん！")
 
+    menu = ["ホーム", "コンテンツ",]
+    choice = st.sidebar.selectbox("メニュー", menu)
+
+    if choice == "ホーム":
+        st.subheader("ホーム")
+        st.write("ホームです。")
+
+    elif choice == "コンテンツ":
+        st.subheader("コンテンツ")
+        st.write("ここにコンテンツを表示できます。")
+
+
+    if st.sidebar.button("ログアウト"):
+        sign_out()
+        st.experimental_rerun()
+
+def check_auth():
+    return 'user' in st.session_state
+
+
+def main():
+    if not check_auth():
+        login_signup_page()
+    else:
+        main_app()
+
+if __name__ == "__main__":
+    main()
