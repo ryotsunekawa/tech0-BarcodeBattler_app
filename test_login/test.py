@@ -1,16 +1,49 @@
 import os, io, re, json, base64, zipfile, random
-from dotenv import load_dotenv
 import streamlit as st
 from supabase import create_client
 
 # .env ファイルを読み込む
-load_dotenv()
 
-url = os.getenv("SUPABASE_URL")
-key = os.getenv("SUPABASE_KEY")
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+def get_api_url(env_url: str = "SUPABASE_URL") -> str | None:
+    url = os.getenv(env_url)
+    if url:
+        return url
+    try:
+        return st.secrets[env_url]  # secrets.toml が無い場合もあるため例外安全にする
+    except Exception:
+        return None
+    
+def get_api_key(env_key: str = "SUPABASE_KEY") -> str | None:
+    key = os.getenv(env_key)
+    if key:
+        return key
+    try:
+        return st.secrets[env_key]  # secrets.toml が無い場合もあるため例外安全にする
+    except Exception:
+        return None
+    
+API_URL = get_api_url()
+if not API_URL:
+    st.error(
+        "APIのURLが見つかりません。\n\n"
+         )
+    st.stop() 
+
+API_KEY = get_api_key()
+if not API_KEY:
+    st.error(
+        "APIのキーが見つかりません。\n\n"
+       )
+    st.stop()
 
 # supabaseを呼び出すためのコード
-supabase = create_client(url, key)
+supabase = create_client(API_URL, API_KEY)
 
 
 # これらはcreate_clientを使うことで呼び出される関数である。
