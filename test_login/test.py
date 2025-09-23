@@ -62,7 +62,7 @@ def sign_out():
 
 
 def login_signup_page():
-    st.title("ログイン / サインアップ（β4版）")
+    st.title("ログイン / サインアップ（β5版）")
     tab1,tab2 = st.tabs(["ログイン","サインアップ"])
     
     with tab1:
@@ -80,9 +80,18 @@ def login_signup_page():
     with tab2:
         new_email = st.text_input("メールアドレス",key="signup_email")
         new_password = st.text_input("パスワード",type="password",key="signup_password")
+        new_name = st.text_input("名前",key="signup_name")
         if st.button("サインアップ"):
             try:
-                res = sign_up(new_email, new_password)
+                response = supabase.auth.sign_up({
+                    "email": new_email,
+                    "password": new_password,
+                    "options": {
+                        "data": {
+                            "full_name": new_name
+                        }
+                    }
+                })
                 # すでに登録済みか確認（現状pythonではすでに登録済みでもサクセスになる。）res.user is NoneはGPTの書き方
                 if res.user is None:
                     st.error("このメールアドレスはすでに登録済みか、登録できません。")
@@ -102,7 +111,7 @@ def login_signup_page():
                 if "already" in code:
                     st.error("このメールアドレスはすでに登録済みです。")
                 elif "validation" in code:
-                   st.error("メールアドレスが不適切です。")
+                   st.error("メールアドレスの書き方不適切です。")
                 else:
                     st.error("その他のエラー: " + message)
 
@@ -111,7 +120,7 @@ def login_signup_page():
 
 def main_app():
     st.title("メインアプリケーション")
-    st.write(f"ようこそ、{st.session_state.user.email}さん！")
+    st.write(f"ようこそ、{st.session_state.user.options}さん！")
 
     menu = ["ホーム", "コンテンツ",]
     choice = st.sidebar.selectbox("メニュー", menu)
