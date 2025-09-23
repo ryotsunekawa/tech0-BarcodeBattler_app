@@ -26,6 +26,7 @@ def get_api_key(env_key: str = "SUPABASE_KEY") -> str | None:
         return st.secrets[env_key]  # secrets.toml が無い場合もあるため例外安全にする
     except Exception:
         return None
+
     
 API_URL = get_api_url()
 if not API_URL:
@@ -41,8 +42,11 @@ if not API_KEY:
        )
     st.stop()
 
+
+
 # supabaseを呼び出すためのコード
 supabase = create_client(API_URL, API_KEY)
+
 
 
 # これらはcreate_clientを使うことで呼び出される関数である。
@@ -79,7 +83,7 @@ def login_signup_page():
         if st.button("サインアップ"):
             try:
                 res = sign_up(new_email, new_password)
-                # すでに登録済みか確認
+                # すでに登録済みか確認（現状pythonではすでに登録済みでもサクセスになる。）res.user is NoneはGPTの書き方
                 if res.user is None:
                     st.error("このメールアドレスはすでに登録済みか、登録できません。")
                 else:
@@ -95,10 +99,10 @@ def login_signup_page():
                 st.write("error code property:", code)
                 st.write("status code:", status)
             
-                if "already" in message.lower():
+                if "already" in code:
                     st.error("このメールアドレスはすでに登録済みです。")
-                elif "validation" in message.lower():
-                   st.error("このメールアドレスはすでに登録済みです。")
+                elif "validation" in code:
+                   st.error("メールアドレスが不適切です。")
                 else:
                     st.error("その他のエラー: " + message)
 
