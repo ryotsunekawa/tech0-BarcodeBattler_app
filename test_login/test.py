@@ -47,7 +47,6 @@ supabase = create_client(API_URL, API_KEY)
 
 # これらはcreate_clientを使うことで呼び出される関数である。
 def sign_up(email, password):
-    # Supabase SDKの内部でエラーが発生した場合は、この関数がAuthApiErrorをスローします。
     return supabase.auth.sign_up({"email": email, "password": password})
 
 def sign_in(email, password):
@@ -59,11 +58,11 @@ def sign_out():
 
 
 def login_signup_page():
-    st.title("ログイン / サインアップ（β2版）")
+    st.title("ログイン / サインアップ（β3版）")
     tab1,tab2 = st.tabs(["ログイン","サインアップ"])
     
     with tab1:
-        email = st.text_input("メールアドレス", key="login_email")
+        email = st.text_input("メールアドレス", key="login_email") #session_state.login_emailが使えるようになる。
         password = st.text_input("パスワード",type="password",key="login_password")
         if st.button("ログイン"):
             try:
@@ -78,20 +77,19 @@ def login_signup_page():
         new_email = st.text_input("メールアドレス",key="signup_email")
         new_password = st.text_input("パスワード",type="password",key="signup_password")
         if st.button("サインアップ"):
-            # サインアップ処理全体をtry...exceptブロックで囲みます。
             try:
                 res = sign_up(new_email, new_password)
-                st.success("アカウントが作成されました。メールを確認して有効化してください。")
+                # すでに登録済みか確認
+                if res.user is None:
+                    st.error("このメールアドレスはすでに登録済みか、登録できません。")
+                else:
+                    st.success("アカウントが作成されました。メールを確認してください。※登録済みの場合はメールが送信されません。")
+
             except AuthApiError as e:
-                # SupabaseからのAuthApiErrorをキャッチし、メッセージをチェックします。
-                error_msg = str(e)
-                if "identity_already_exists" in error_msg.lower():
+                if "identity_already_exists" in str(e):
                     st.error("このメールアドレスはすでに登録済みです。")
                 else:
-                    st.error(f"サインアップに失敗しました: {error_msg}")
-            except Exception as e:
-                # その他の予期せぬエラーをキャッチします。
-                st.error(f"サインアップ中に予期せぬエラーが発生しました: {str(e)}")
+                    st.error(f"サインアップ中に予期せぬエラーが発生しました: {str(e)}")
 
 #メイン画面
 
