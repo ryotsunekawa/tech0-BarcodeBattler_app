@@ -86,10 +86,23 @@ def login_signup_page():
                     st.success("アカウントが作成されました。メールを確認してください。※登録済みの場合はメールが送信されません。")
 
             except AuthApiError as e:
-                if "identity_already_exists" in str(e):
-                    st.error("このメールアドレスはすでに登録済みです。")
+                # e.code があれば取得
+                code = getattr(e, "code", None)
+                message = str(e)
+                status = getattr(e, "status_code", None)  # or whatever属性があれば
+
+                st.write("error message:", message)
+                st.write("error code property:", code)
+                st.write("status code:", status)
+            
+                if code == "identity_already_exists":
+                    st.error("登録済みです")
+                elif "identity_already_exists" in message:
+                    # フォールバック
+                    st.error("登録済みです (message fallback)")
                 else:
-                    st.error(f"サインアップ中に予期せぬエラーが発生しました: {str(e)}")
+                    st.error("その他のエラー: " + message)
+
 
 #メイン画面
 
