@@ -59,7 +59,7 @@ def sign_out():
 
 
 def login_signup_page():
-    st.title("ログイン / サインアップ")
+    st.title("ログイン / サインアップ（β版）")
     tab1,tab2 = st.tabs(["ログイン","サインアップ"])
     
     with tab1:
