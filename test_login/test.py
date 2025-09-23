@@ -70,7 +70,10 @@ def login_signup_page():
                 res = sign_in(email,password)
                 st.session_state.user = res.user
                 st.success("ログインに成功しました")
-                st.experimental_rerun()
+                st.rerun()
+
+
+
             except Exception as e:
                 st.error(f"ログインに失敗しました: {str(e)}")
 
@@ -78,11 +81,20 @@ def login_signup_page():
         new_email = st.text_input("メールアドレス",key="signup_email")
         new_password = st.text_input("パスワード",type="password",key="signup_password")
         if st.button("サインアップ"):
+            res = sign_up(new_email, new_password)
+
+                
             try:
-                res = sign_up(new_email,new_password)
-                st.success("アカウントが作成されました。メールを確認してアカウントを有効化してください。")
+                res = supabase.auth.sign_up({"email": new_email, "password": new_password})
+                st.success("アカウントが作成されました。メールを確認して有効化してください。")
             except Exception as e:
-                st.error(f"サインアップに失敗しました:{str(e)}")
+                error_msg = str(e)
+                if "already registered" in error_msg.lower():
+                    st.error("このメールアドレスはすでに登録済みです。")
+                else:
+                    st.error(f"サインアップに失敗しました: {error_msg}")
+
+
 
 #メイン画面
 
@@ -104,11 +116,16 @@ def main_app():
 
     if st.sidebar.button("ログアウト"):
         sign_out()
-        st.experimental_rerun()
+        st.rerun()
+
+#　アプリケーション全体の流れを制御する
+
+#check_auth()はsession_stateにuserと言うキーが登録されているかの確認。
 
 def check_auth():
     return 'user' in st.session_state
 
+#mainとは 起動時にcheckがFalseであればlogin_signup_pageを起動し、Trueでればmain_appを起動すること。
 
 def main():
     if not check_auth():
@@ -116,5 +133,8 @@ def main():
     else:
         main_app()
 
+
+#__name__はpythonファイルが実行されるときに自動で設定される。
+#また、直接実行されたとき、__name__は"__main__"になる。（他ファイルからインポートされた場合は）
 if __name__ == "__main__":
     main()
