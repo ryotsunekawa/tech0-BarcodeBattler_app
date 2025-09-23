@@ -58,7 +58,7 @@ def sign_out():
 
 
 def login_signup_page():
-    st.title("ログイン / サインアップ（β3版）")
+    st.title("ログイン / サインアップ（β4版）")
     tab1,tab2 = st.tabs(["ログイン","サインアップ"])
     
     with tab1:
@@ -95,11 +95,8 @@ def login_signup_page():
                 st.write("error code property:", code)
                 st.write("status code:", status)
             
-                if code == "identity_already_exists":
-                    st.error("登録済みです")
-                elif "identity_already_exists" in message:
-                    # フォールバック
-                    st.error("登録済みです (message fallback)")
+                if "already" in message.lower():
+                    st.error("このメールアドレスはすでに登録済みです。")
                 else:
                     st.error("その他のエラー: " + message)
 
