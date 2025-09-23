@@ -97,6 +97,8 @@ def login_signup_page():
             
                 if "already" in message.lower():
                     st.error("このメールアドレスはすでに登録済みです。")
+                elif "validation" in message.lower():
+                   st.error("このメールアドレスはすでに登録済みです。")
                 else:
                     st.error("その他のエラー: " + message)
 
