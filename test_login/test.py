@@ -68,7 +68,7 @@ def login_signup_page():
     with tab1:
         email = st.text_input("メールアドレス", key="login_email") #session_state.login_emailが使えるようになる。
         password = st.text_input("パスワード",type="password",key="login_password")
-        if st.button("ログイン",type="primary"):
+        if st.button("ログインする",type="primary"):
             try:
                 res = sign_in(email,password)
                 user = res.user
@@ -89,7 +89,7 @@ def login_signup_page():
         new_email = st.text_input("メールアドレス",key="signup_email")
         new_password = st.text_input("パスワード",type="password",key="signup_password")
         new_name = st.text_input("名前（任意）",key="signup_name")
-        if st.button("サインアップ",type="primary"):
+        if st.button("会員登録をする",type="primary"):
             try:
                 response = supabase.auth.sign_up({
                     "email": new_email,
