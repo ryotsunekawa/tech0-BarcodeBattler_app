@@ -62,26 +62,34 @@ def sign_out():
 
 
 def login_signup_page():
-    st.title("ログイン / サインアップ（β5版）")
-    tab1,tab2 = st.tabs(["ログイン","サインアップ"])
+    st.header("令和版バーコードバトラー（β版）",divider="red")
+    tab1,tab2 = st.tabs(["ログイン","新規会員登録"])
     
     with tab1:
         email = st.text_input("メールアドレス", key="login_email") #session_state.login_emailが使えるようになる。
         password = st.text_input("パスワード",type="password",key="login_password")
-        if st.button("ログイン"):
+        if st.button("ログイン",type="primary"):
             try:
                 res = sign_in(email,password)
-                st.session_state.user = res.user
-                st.success("ログインに成功しました")
-                st.rerun()
+                user = res.user
+                if user :
+                    st.session_state.user = user
+                    st.session_state.full_name = user.user_metadata.get("full_name", user.email)
+                    st.success("ログインに成功しました")
+                    st.rerun()
+                else:
+                    st.error("userを取得できずにログインに失敗しました")
             except Exception as e:
                 st.error(f"ログインに失敗しました: {str(e)}")
+                
+        st.markdown("---")
+        st.button("パスワードをお忘れの方はこちら")
 
     with tab2:
         new_email = st.text_input("メールアドレス",key="signup_email")
         new_password = st.text_input("パスワード",type="password",key="signup_password")
         new_name = st.text_input("名前",key="signup_name")
-        if st.button("サインアップ"):
+        if st.button("サインアップ",type="primary"):
             try:
                 response = supabase.auth.sign_up({
                     "email": new_email,
@@ -114,24 +122,30 @@ def login_signup_page():
                    st.error("メールアドレスの書き方不適切です。")
                 else:
                     st.error("その他のエラー: " + message)
+            
 
 
 #メイン画面
 
 def main_app():
-    st.title("メインアプリケーション")
-    st.write(f"ようこそ、{st.session_state.user.options}さん！")
+    # full_name があればそれを、なければ email を表示
+    name_to_display = st.session_state.get("full_name", st.session_state.user.email)
+    st.subheader(f"{name_to_display} さん、おかえりなさい！")
 
-    menu = ["ホーム", "コンテンツ",]
-    choice = st.sidebar.selectbox("メニュー", menu)
+    tab1,tab2,tab3 = st.tabs(["キャラ生成","図鑑","バトル"])
+    
+    with tab1:
+        scan = st.text_input("スキャン", key="login_email") #session_state.login_emailが使えるようになる。
+        todoufuken = st.text_input("都道府県",key="login_password")
+        st.button("生成する")
+    
+    with tab2:
+        st.write("cominng soon")
 
-    if choice == "ホーム":
-        st.subheader("ホーム")
-        st.write("ホームです。")
+    
+    with tab3:
+        st.write("cominng soon")
 
-    elif choice == "コンテンツ":
-        st.subheader("コンテンツ")
-        st.write("ここにコンテンツを表示できます。")
 
 
     if st.sidebar.button("ログアウト"):
