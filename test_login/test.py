@@ -83,7 +83,7 @@ def login_signup_page():
                 st.error(f"ログインに失敗しました: {str(e)}")
                 
         st.markdown("---")
-        st.button("パスワードをお忘れの方はこちら")
+        st.button("パスワードをお忘れの方はこちら（ダミー）")
 
     with tab2:
         new_email = st.text_input("メールアドレス",key="signup_email")
