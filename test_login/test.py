@@ -100,11 +100,7 @@ def login_signup_page():
                         }
                     }
                 })
-                # すでに登録済みか確認（現状pythonではすでに登録済みでもサクセスになる。）res.user is NoneはGPTの書き方
-                if res.user is None:
-                    st.error("このメールアドレスはすでに登録済みか、登録できません。")
-                else:
-                    st.success("アカウントが作成されました。メールを確認してください。※登録済みの場合はメールが送信されません。")
+                st.success("アカウントが作成されました。メールを確認してください。※登録済みの場合はメールが送信されません。")
 
             except AuthApiError as e:
                 # e.code があれば取得
