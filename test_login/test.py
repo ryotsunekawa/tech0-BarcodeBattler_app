@@ -62,7 +62,7 @@ def sign_out():
 
 
 def login_signup_page():
-    st.header("令和版バーコードバトラー（β版）",divider="red")
+    st.header("令和版バーコードバトラー（β版）",divider="gray")
     tab1,tab2 = st.tabs(["ログイン","新規会員登録"])
     
     with tab1:
