@@ -88,7 +88,7 @@ def login_signup_page():
     with tab2:
         new_email = st.text_input("メールアドレス",key="signup_email")
         new_password = st.text_input("パスワード",type="password",key="signup_password")
-        new_name = st.text_input("名前",key="signup_name")
+        new_name = st.text_input("名前（任意）",key="signup_name")
         if st.button("サインアップ",type="primary"):
             try:
                 response = supabase.auth.sign_up({
