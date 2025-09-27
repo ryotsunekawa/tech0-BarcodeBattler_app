@@ -1,0 +1,7 @@
+streamlit
+supabase>=1.0.0
+python-dotenv
+pillow
+requests
+pandas
+psycopg2-binary

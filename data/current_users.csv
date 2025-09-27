@@ -1,0 +1,6 @@
+user_id,mail_address,user_name,location,created_at
+95306ee7-9c4c-48cf-b607-a1966d38404f,tanaka@example.com,田中太郎,東京都,2025-09-27T11:45:01.868475+00:00
+b70faa21-bd2b-48b8-b44a-f2caf7abbfc0,sato@example.com,佐藤花子,大阪府,2025-09-27T11:45:01.868475+00:00
+311345a7-c386-4230-8d62-6e172539bb1f,yamada@example.com,山田一郎,愛知県,2025-09-27T11:45:01.868475+00:00
+ad421901-251f-42be-b363-3c1a74c0be4c,suzuki@example.com,鈴木美咲,福岡県,2025-09-27T11:45:01.868475+00:00
+179cb812-631b-4056-8463-1d5d64e09bb2,watanabe@example.com,渡辺健司,北海道,2025-09-27T11:45:01.868475+00:00

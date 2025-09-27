@@ -1,0 +1,34 @@
+# 環境変数とAPIキー
+.env
+.env.local
+.env.production
+.env.staging
+
+# Python仮想環境
+.venv/
+venv/
+env/
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS生成ファイル
+.DS_Store
+Thumbs.db
+
+# ログファイル
+*.log
+
+# 一時ファイル
+*.tmp
+*.temp
