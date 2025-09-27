@@ -18,7 +18,7 @@ def get_api_url(env_url: str = "SUPABASE_URL") -> str | None:
     except Exception:
         return None
     
-def get_api_key(env_key: str = "SUPABASE_ANON_KEY") -> str | None:
+def get_api_key(env_key: str = "SUPABASE_KEY") -> str | None:
     key = os.getenv(env_key)
     if key:
         return key
