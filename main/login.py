@@ -609,7 +609,7 @@ def main_app():
                         "name": "テックの妖精",
                         "image": "https://lkhbqezbsjojrlmhnuev.supabase.co/storage/v1/object/public/character-images/chatgpt_%20Image_2025_9_28_%2023_59_31.png",
                         "region": "不明",
-                        "prompt": "エラーをしたときに現れる妖精。エラーをしても気にするな。"
+                        "prompt": "エラーをしたときに現れる妖精。出る杭最高卍"
                     }
                     
                     st.info("該当商品がデータベースに無い可能性があります！デフォルトキャラを召喚！")
