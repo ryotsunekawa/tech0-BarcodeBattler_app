@@ -654,6 +654,13 @@ def main_app():
                     st.write(f"**名前**: {character_info.get('name', '名前不明')}")
                     st.write(f"**居住地**: {character_info.get('region', '')}")
                     st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
+                    if char.get('character_parameter'):
+                        params = char['character_parameter']
+                        if isinstance(params, dict):
+                            st.write("**ステータス**:")
+                            for key, value in params.items():
+                                if key in ['power', 'attack', 'defense', 'speed']:
+                                    st.write(f"- {key}: {value}")
 
 
                 with st.expander("🔍 JANコード詳細"):
