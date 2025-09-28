@@ -749,7 +749,6 @@ def main_app():
                                     if key in ['power', 'attack', 'defense', 'speed']:
                                         st.write(f"- {key}: {value}")
                         st.write(f"**居住地**: {character_info.get('region', '')}")
-                        st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
                         st.write(f"**作成日**: {char.get('created_at', 'N/A')}")
         else:
             st.info("まだキャラクターがいません。スキャンしてみましょう！")
