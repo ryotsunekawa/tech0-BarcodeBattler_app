@@ -783,15 +783,12 @@ def main():
         page_icon="📱",
         layout="wide"
     )
-    
+
     if not check_auth():
         login_signup_page()
     else:
         main_app()
-    if not check_auth():
-        login_signup_page()
-    else:
-        main_app()
+
 
 
 #__name__はpythonファイルが実行されるときに自動で設定される。
