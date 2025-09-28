@@ -18,6 +18,12 @@ __pycache__/
 
 # IDE設定
 .vscode/
+
+# 開発用ファイル（archiveフォルダは含める）
+# 一時ファイル除外
+*.tmp
+*.temp
+.DS_Store
 .idea/
 *.swp
 *.swo
