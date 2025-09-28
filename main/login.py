@@ -748,7 +748,6 @@ def main_app():
                                 for key, value in params.items():
                                     if key in ['power', 'attack', 'defense', 'speed']:
                                         st.write(f"- {key}: {value}")
-                        st.write(f"**居住地**: {char.get('region', 'N/A')}")
                         st.write(f"**作成日**: {char.get('created_at', 'N/A')}")
         else:
             st.info("まだキャラクターがいません。スキャンしてみましょう！")
