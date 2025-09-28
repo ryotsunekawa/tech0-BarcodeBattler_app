@@ -13,9 +13,13 @@ from io import BytesIO
 from PIL import Image
 import requests
 
+
 #画像保存で使う
 import time
 from io import BytesIO
+
+#JANCODEで使う
+from urllib.parse import urlencode
 
 
 
@@ -55,22 +59,52 @@ stability_api_key = get_secret_or_env("STABILITY_API_KEY")
 if stability_api_key is None:
     raise Exception("Missing Stability API key.")
 
+# JANCODE LOOKUPを使う準備①｜設定
+JANCODE_APP_ID = get_secret_or_env("JANCODE_APP_ID")  # .env or st.secrets に追加しておく
+JANCODE_BASE = "https://api.jancodelookup.com/"
+
+@st.cache_data(ttl=300)  # 同じJANは5分キャッシュ
+def fetch_product_by_jan(jan_code: str, hits: int = 10) -> dict:
+    """jancodelookup の code 検索（前方一致）。生のJSONを返す。"""
+    params = {"appId": JANCODE_APP_ID, "query": jan_code, "hits": hits, "type": "code"}
+    r = requests.get(JANCODE_BASE, params=params, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+#JANCODE LOOKUPを使う準備②｜API
+from urllib.parse import urlencode
+
+JANCODE_APP_ID = get_secret_or_env("JANCODE_APP_ID")
+JANCODE_BASE_URL = "https://api.jancodelookup.com/"
+
+# JANCODEを使うための関数
+def lookup_by_code(jan_code: str, hits: int = 1):
+    """JANコードから商品情報を取得"""
+    params = {
+        "appId": JANCODE_APP_ID,
+        "query": jan_code,
+        "hits": hits,
+        "type": "code",   # JANコード検索
+    }
+    url = f"{JANCODE_BASE_URL}?{urlencode(params)}"
+    try:
+        r = requests.get(JANCODE_BASE_URL, params=params, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        products = data.get("product") or []
+        if not products:
+            return None
+        return products[0]  # 最初の1件を返す
+    except Exception as e:
+        st.error(f"JANコード検索エラー: {e}")
+        return None
+
+
 
 # 画像生成する関数
-def generate_character_image():
+def generate_character_image(product_json):
     # 1. 商品情報取得
-    product_json = {
-        "codeNumber": "4901301446596",
-        "codeType": "JAN",
-        "itemName": "アタックZERO パーフェクトスティック 76本入り",
-        "itemModel": "",
-        "itemUrl": "https://www.jancodelookup.com/code/4901301446596/",
-        "itemImageUrl": "https://image.jancodelookup.com/4901301446596.jpg",
-        "brandName": "",
-        "makerName": "花王株式会社",
-        "makerNameKana": "カオウ",
-        "ProductDetails": []
-    }
+    st.json(product_json) # デバッグ用（不要なら消せます）
 
     item_name =  product_json["itemName"]
 
@@ -232,7 +266,7 @@ def save_character_to_database(supabase, bucket_name,user_id,character_name, ima
 
         # ④ DBに保存
         data = {
-            "code_number": user_id,
+            "user_id": user_id,
             "character_name": character_name,
             "character_img_url": public_url,
             "item_name":item_name
@@ -431,7 +465,33 @@ def main_app():
         with col2:
             # 生成ボタン
             if st.button("✨ 生成する", use_container_width=True):
-                region, character_name, image, image_base64, item_name= generate_character_image()
+                # 1) 入力からJAN取得（カメラで読めた digits があれば digits_input に入っている想定）
+                jan = (digits_input or "").strip().replace(" ", "").replace("　", "")
+                if not jan:
+                    st.error("JANコードを入力（またはスキャン）してください。")
+                    st.stop()
+
+                 # 2) APIで商品検索
+                try:
+                    with st.spinner("JANから商品情報を取得中..."):
+                        product_json = lookup_by_code(jan, hits=10)  # ← 先に貼ってある関数を使用
+                except requests.HTTPError as e:
+                    st.error(f"HTTPエラー: {e.response.status_code} {e.response.text[:200]}")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"取得時エラー: {e}")
+                    st.stop()
+
+                # 3) ヒットなし
+                if not product_json:
+                    st.info("該当商品がデータベースに無い可能性があります（product が空）。")
+                    st.stop()
+
+                # 4) セッションに保存（以後の画面遷移でも使えるように）
+                st.session_state["last_product_json"] = product_json
+
+                 # 5) 生成
+                region, character_name, image, image_base64, item_name= generate_character_image(product_json)
                 st.session_state["region"] = region
                 st.session_state["character_name"] = character_name
                 st.session_state["image"] = image
