@@ -140,11 +140,7 @@ def upload_character_image_to_storage(image: Image, character_name: str, barcode
         safe_character_name = sanitize_filename(character_name)
         filename = f"characters/{user_id}_{barcode}_{timestamp}_{safe_character_name}.png"
         
-        # ファイル名変換情報
-        with st.expander("🔍 画像保存の詳細"):
-            st.write(f"**元のキャラクター名**: {character_name}")
-            st.write(f"**安全なファイル名**: {safe_character_name}")
-            st.write(f"**保存パス**: {filename}")
+
         
         # Supabaseストレージにアップロード
         response = supabase.storage.from_('character-images').upload(filename, img_bytes, {
@@ -210,11 +206,7 @@ def save_character_to_db_unified(character_data: dict, character_image: Image = 
         # Auth UIDを直接使用
         character_data["user_id"] = st.session_state.user.id
         
-        # ユーザー情報確認
-        with st.expander("🔍 保存情報の詳細"):
-            st.write(f"**ユーザーID**: {st.session_state.user.id[:8]}...")
-            st.write(f"**メールアドレス**: {st.session_state.user.email}")
-            st.info("💡 RLS無効化により直接保存可能")
+
         
         # 画像をストレージにアップロード
         if character_image:
@@ -235,13 +227,6 @@ def save_character_to_db_unified(character_data: dict, character_image: Image = 
         with st.spinner("📦 データベースに保存中..."):
             response = supabase.table('user_operations').insert(character_data).execute()
         
-        # 詳細情報（エクスパンダー内に格納）
-        with st.expander("🔍 保存データの詳細"):
-            st.json(character_data)
-            if hasattr(response, 'error') and response.error:
-                st.error(f"保存エラー: {response.error}")
-            else:
-                st.success("✅ データベース保存成功")
         
         if response.data:
             st.success("🎉 キャラクターを図鑑に保存しました！")
@@ -645,7 +630,7 @@ def main_app():
 
                 # 4) セッションに保存（以後の画面遷移でも使えるように）
                 st.session_state["last_product_json"] = product_json
-                st.success(f"🎉 JANコードの接続完了！")
+                st.success(f"🎉 JANコードの読み込み完了！")
 
                 # 5) 生成
                 with st.spinner("キャラクターを生成中..."):
