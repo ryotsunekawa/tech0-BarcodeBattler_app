@@ -1,0 +1,12 @@
+# login(1).py ベース Auth統合版 必要パッケージ
+
+streamlit>=1.28.0
+supabase>=2.0.0
+python-dotenv>=1.0.0
+pillow>=10.0.0
+pyzbar>=0.1.9
+openai>=1.0.0
+requests>=2.31.0
+
+# オプション（開発環境で必要な場合）
+# stability-sdk>=0.8.0
