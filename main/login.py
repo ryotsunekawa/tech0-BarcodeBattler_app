@@ -654,7 +654,10 @@ def main_app():
                     st.write(f"**名前**: {character_info.get('name', '名前不明')}")
                     st.write(f"**居住地**: {character_info.get('region', '')}")
                     st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
-                    st.write(f"""※図鑑に保存するとステータスが表示されます。""")
+                    st.markdown(
+                        '<span style="font-size:0.8em; color:gray;">※図鑑に保存するとステータスが表示されます。</span>',
+                        unsafe_allow_html=True
+                    )
 
 
                 with st.expander("🔍 JANコード詳細"):
