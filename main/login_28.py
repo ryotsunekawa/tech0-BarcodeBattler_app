@@ -1,7 +1,7 @@
 import os, io, re, json, base64, zipfile, random, time
 from PIL import Image #画像ファイルを使用する（バーコード読み込み時や画像生成時）
 import streamlit as st #streamlitを使う
-from pyzbar.pyzbar import decode # import zxingcpp から変更。(pythonでしか使用しないため)
+#from pyzbar.pyzbar import decode # import zxingcpp から変更。(pythonでしか使用しないため)
 from supabase import create_client, AuthApiError #supabaseを使う
 #open aiを使う
 from openai import OpenAI
@@ -277,9 +277,6 @@ def get_user_characters_unified():
 # 画像生成する関数
 def generate_character_image(product_json):
     # 1. 商品情報取得
-    st.json(product_json) # デバッグ用（不要なら消せます）
-
-    item_name =  product_json["itemName"]
 
     # 2. OpenAIでプロンプト生成
     region = st.session_state.todoufuken
@@ -332,10 +329,6 @@ def generate_character_image(product_json):
 
         generated_text = response.choices[0].message.content.strip()
         
-        # デバッグ用: OpenAIの応答を表示
-        with st.expander("🔍 OpenAI応答の詳細"):
-            st.write("**生成されたテキスト:**")
-            st.code(generated_text)
         
         lines = generated_text.splitlines()
         sd_prompt = ""
@@ -364,11 +357,6 @@ def generate_character_image(product_json):
         # キャラクター名が見つからない場合、デフォルト名を生成
         if not character_name:
             character_name = f"キャラ{random.randint(1000, 9999)}"    
-
-        # デバッグ情報
-        with st.expander("🔍 抽出結果"):
-            st.write(f"**プロンプト**: {sd_prompt}")
-            st.write(f"**キャラクター名**: {character_name}")
 
         if not sd_prompt:
             st.error("OpenAIでプロンプト生成に失敗しました")
@@ -495,7 +483,7 @@ def login_signup_page():
                     profile = create_user_profile_unified(response.user.id, new_email, new_name)
                     if profile:
                         st.success("アカウントとプロフィールが作成されました。ログインしてください。")
-                        st.info("✨ Auth UID = DB user_id で完全統一されました！")
+                        st.info("✨ ログインして早速始めましょう！")
                     else:
                         st.error("プロフィール作成に失敗しました。")
                 else:
@@ -519,22 +507,12 @@ def main_app():
     if 'user_profile' in st.session_state and st.session_state.user_profile:
         name_to_display = st.session_state.user_profile.get("user_name", st.session_state.user.email)
         # ユーザー情報をサイドバーに表示
-        st.sidebar.success(f"👋 {name_to_display}さん")
-        st.sidebar.write(f"📧 {st.session_state.user_profile.get('mail_address')}")
+        st.sidebar.success(f"👋 {name_to_display}さん、こんにちは")
         
-        # 完全統一版デバッグ情報
-        with st.sidebar.expander("🔧 完全統一版情報"):
-            st.write(f"**Auth UID**: {st.session_state.user.id[:8]}...")
-            st.write(f"**DB user_id**: {st.session_state.user_profile['user_id'][:8]}...")
-            
-            # IDの一致確認
-            ids_match = st.session_state.user.id == st.session_state.user_profile['user_id']
-            match_status = "✅ 一致" if ids_match else "❌ 不一致"
-            st.write(f"**ID統一**: {match_status}")
+    
     else:
         name_to_display = st.session_state.user.email if 'user' in st.session_state else "ユーザー"
     
-    st.subheader(f"{name_to_display} さん、おかえりなさい！")
 
     if "page" not in st.session_state:
         st.session_state.page = "main"
@@ -581,7 +559,7 @@ def main_app():
             img = Image.open(io.BytesIO(img_file.getvalue()))
         
             #pyzbar でデコード
-            results = decode(img)
+            # results = decode(img)
         
             if results:
                 # 複数バーコードがある場合は最初のものを使う
@@ -601,7 +579,8 @@ def main_app():
             )
         with col2:
             st.write("")  # 縦位置調整
-            number_ok = st.button("✅ 数字OK")
+            st.write("") 
+            st.write("✅ 手入力OK")
 
         # 都道府県選択
         prefectures = [
@@ -629,7 +608,7 @@ def main_app():
 
                  # 2) APIで商品検索
                 try:
-                    with st.spinner("JANから商品情報を取得中..."):
+                    with st.spinner("JANコードを確認中..."):
                         product_json = lookup_by_code(jan, hits=10)  # ← 先に貼ってある関数を使用
                 except requests.HTTPError as e:
                     st.error(f"HTTPエラー: {e.response.status_code} {e.response.text[:200]}")
@@ -639,31 +618,64 @@ def main_app():
                     st.stop()
 
                 # 3) ヒットなし
-                if not product_json:
-                    st.info("該当商品がデータベースに無い可能性があります（product が空）。")
-                    st.stop()
+                if not product_json:                    
+                    # デフォルトキャラクターを表示
+                    default_character = {
+                        "name": "テックの妖精",
+                        "image": "https://lkhbqezbsjojrlmhnuev.supabase.co/storage/v1/object/public/character-images/chatgpt_%20Image_2025_9_28_%2023_59_31.png",
+                        "region": "不明",
+                        "prompt": "エラーをしたときに現れる妖精。エラーをしても気にするな。"
+                    }
+                    
+                    st.info("該当商品がデータベースに無い可能性があります！デフォルトキャラを召喚！")
+                    st.image(default_character['image'], use_container_width=True)
+                    
+                    with st.expander("🔍 キャラ詳細"):
+                        st.write(f"**名前**: {default_character['name']}")
+                        st.write(f"**居住地**: {default_character['region']}")
+                        st.write(f"**備考**: {default_character['prompt']}")
+                    st.write("JANコードを確認して、もう一度お試しください。")
+
+                    st.markdown("---")
+                    if st.button("⬅️ メイン画面へ戻る"):
+                        go_to("main")
+                    
+                
+                    st.stop()  # ここで処理を止める（以降の生成処理には進まない）
 
                 # 4) セッションに保存（以後の画面遷移でも使えるように）
                 st.session_state["last_product_json"] = product_json
+                st.success(f"🎉 JANコードの接続完了！")
 
-                 # 5) 生成
-                prompt, name, image = generate_character_image(product_json)
+                # 5) 生成
+                with st.spinner("キャラクターを生成中..."):
+                    prompt, name, image = generate_character_image(product_json)
+                
                 if prompt and name and image:
-                        # 生成成功時は生成フラグを立てる
-                        st.session_state.character_generated = True
-                        st.rerun()  # ページを再読み込みして保存ボタンを表示
+                    # 生成成功時は生成フラグを立てる
+                    st.session_state.character_generated = True
+                    st.rerun()  # ページを再読み込みして保存ボタンを表示
+                
 
             # キャラクターが生成済みの場合、表示と保存ボタンを表示
             if st.session_state.get('character_generated') and st.session_state.get('generated_character'):
                 character_info = st.session_state.generated_character
                 
                 st.success(f"🎉 新キャラを獲得！")
-                st.markdown(f'''キャラクター名： :blue[{character_info.get('name', '名前不明')}]''')
+                st.markdown(f'''名前： :blue[{character_info.get('name', '名前不明')}]''')
                 st.image(character_info['image'], use_container_width=True)
-                st.write(f"**キャラ詳細**")
-                st.write(f"{character_info.get('prompt', '')}")
-                st.write(f"**居住地**: {character_info.get('region', '')}")
-                
+
+                with st.expander("🔍 キャラ詳細"):
+                    st.write(f"**名前**: {character_info.get('name', '名前不明')}")
+                    st.write(f"**居住地**: {character_info.get('region', '')}")
+                    st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
+
+
+                with st.expander("🔍 JANコード詳細"):
+                    st.write(f"""**商品コード**: {st.session_state['last_product_json']['codeNumber']}""")
+                    st.write(f"""**商品名**: {st.session_state['last_product_json']['itemName']}""") 
+                    st.write(f"""**商品URL**: {st.session_state['last_product_json']['itemImageUrl']}""")     
+                        
                 # 保存ボタンを表示
                 col_save1, col_save2 = st.columns(2)
                 with col_save1:
@@ -779,7 +791,7 @@ def check_auth():
 
 def main():
     st.set_page_config(
-        page_title="令和版バーコードバトラー（完全Auth UID統一版）",
+        page_title="令和版バーコードバトラー（β版）",
         page_icon="📱",
         layout="wide"
     )
