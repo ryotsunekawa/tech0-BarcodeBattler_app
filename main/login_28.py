@@ -178,7 +178,6 @@ def create_user_profile_unified(auth_user_id: str, email: str, full_name: str = 
             "user_id": auth_user_id,  # Auth UIDをそのままuser_idとして使用
             "mail_address": email,
             "user_name": full_name or email.split('@')[0],
-            "location": ""
         }
         
         response = supabase.table('users').insert(profile_data).execute()
