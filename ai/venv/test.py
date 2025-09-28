@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os, io, re, json, base64, zipfile, random
 from typing import Dict, List, Tuple
+from supabase import create_client, AuthApiError #supabaseを使う
 
 #open aiを使う
 from openai import OpenAI
@@ -13,6 +14,7 @@ import streamlit as st
 from io import BytesIO
 from PIL import Image
 import requests
+
 
 #.envを使う
 try:
@@ -45,6 +47,11 @@ stability_api_key = get_secret_or_env("STABILITY_API_KEY")
 #API Keyの確認
 if stability_api_key is None:
     raise Exception("Missing Stability API key.")
+
+#SUPABASEを使うための情報
+API_URL = get_secret_or_env("SUPABASE_URL")
+API_KEY = get_secret_or_env("SUPABASE_KEY")
+supabase = create_client(API_URL, API_KEY)
 
 # JANCODEAPI呼び出し
 def generate_character_image():
