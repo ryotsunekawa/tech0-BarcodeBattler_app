@@ -722,7 +722,6 @@ def main_app():
         
         if db_characters:
             st.write(f"**登録済みキャラクター数**: {len(db_characters)}体")
-            st.info("💡 Auth UID = DB user_id で管理されています")
             
             for idx, char in enumerate(db_characters, start=1):
                 with st.expander(f"{idx}. {char.get('character_name', '無名キャラ')} - {char.get('item_name', '不明アイテム')}"):
@@ -741,7 +740,6 @@ def main_app():
                     
                     with col2:
                         st.write(f"**バーコード**: {char.get('code_number', 'N/A')}")
-                        st.write(f"**ユーザーID**: {char.get('user_id', 'N/A')[:8]}...（Auth UID）")
                         
                         if char.get('character_parameter'):
                             params = char['character_parameter']
@@ -750,9 +748,8 @@ def main_app():
                                 for key, value in params.items():
                                     if key in ['power', 'attack', 'defense', 'speed']:
                                         st.write(f"- {key}: {value}")
-                                    elif key == 'region':
-                                        st.write(f"**出身地**: {value}")
-                        
+                        st.write(f"**居住地**: {character_info.get('region', '')}")
+                        st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
                         st.write(f"**作成日**: {char.get('created_at', 'N/A')}")
         else:
             st.info("まだキャラクターがいません。スキャンしてみましょう！")
