@@ -1,7 +1,7 @@
 import os, io, re, json, base64, zipfile, random, time
 from PIL import Image #画像ファイルを使用する（バーコード読み込み時や画像生成時）
 import streamlit as st #streamlitを使う
-#from pyzbar.pyzbar import decode # import zxingcpp から変更。(pythonでしか使用しないため)
+from pyzbar.pyzbar import decode # import zxingcpp から変更。(pythonでしか使用しないため)
 from supabase import create_client, AuthApiError #supabaseを使う
 #open aiを使う
 from openai import OpenAI
@@ -559,7 +559,7 @@ def main_app():
             img = Image.open(io.BytesIO(img_file.getvalue()))
         
             #pyzbar でデコード
-            # results = decode(img)
+            results = decode(img)
         
             if results:
                 # 複数バーコードがある場合は最初のものを使う
