@@ -1,3 +1,6 @@
 streamlit
+Pillow
+pyzbar
 supabase
-python-dotenv
+openai
+requests
