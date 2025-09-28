@@ -12,16 +12,12 @@ from io import BytesIO
 from PIL import Image
 import requests
 
+#画像保存で使う
+import time
+from io import BytesIO
 
 
 # .env ファイルを読み込む
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
-
-#.envを使う
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -74,11 +70,13 @@ def generate_character_image():
         "ProductDetails": []
     }
 
+    item_name =  product_json["itemName"]
+
     # 2. OpenAIでプロンプト生成
     region = st.session_state.todoufuken
     if not region:
         st.error("都道府県を入力してください")
-        return  None, None, None
+        return  None, None, None, None, None
 
     prompt_for_gpt = f"""
     以下の商品情報をもとに、アニメ風キャラクターをStable Diffusionで生成するための
@@ -144,7 +142,7 @@ def generate_character_image():
         st.write("=== lines ===")
         st.write(lines)
         st.error("OpenAIでプロンプト生成に失敗しました")
-        return  None, None, None
+        return  None, None, None, None, None
 
     # 3. Stability AIで画像生成
     stability_prompt = f"""{sd_prompt}"""
@@ -172,8 +170,13 @@ def generate_character_image():
 
     if response.status_code != 200:
         st.error(f"APIエラーが発生しました。ステータスコード: {response.status_code}\n内容: {response.text}")
-        return None, None, None
+        return None, None, None, None, None
     
+    if character_name == "":
+        character_name = "名前なし"
+    
+
+
     #キャラ出力
     data = response.json()
     image_base64 = data["artifacts"][0]["base64"]
@@ -186,8 +189,74 @@ def generate_character_image():
     st.write(f"{sd_prompt}")
     st.write(f"居住地：{region}")
 
-    return sd_prompt, character_name,image
+    return region, character_name,image,image_base64,item_name,
 
+#生成情報を保存する関数
+def save_character_to_database(supabase, bucket_name,user_id,character_name, image_base64,item_name):
+    """
+    キャラクター情報をuser_operationsテーブルに保存
+    
+    Args:
+        user_id: ユーザーID
+        character_name: キャラクター名
+        image_url: 画像URL
+        item_name：商品名
+        
+    Returns:
+        dict: 保存結果
+    """
+    try:
+        # ① Base64 → PNG に変換
+        image_bytes = base64.b64decode(image_base64)
+        image = Image.open(BytesIO(image_bytes))
+        png_buffer = BytesIO()
+        image.save(png_buffer, format="PNG")
+        png_buffer.seek(0)
+
+        # ② Storage にアップロード
+        filename = f"{user_id}_{int(time.time())}.png"
+        upload_result = supabase.storage.from_(bucket_name).upload(
+            filename,
+            png_buffer.getvalue(),
+            {"content-type": "image/png"}  # MIMEタイプを明示
+        )
+        
+        if hasattr(upload_result, "error") and upload_result.error:
+            return {"success": False, "message": f"アップロードに失敗: {upload_result.error}"}
+
+        # ③ 公開URLを取得
+        public_url = supabase.storage.from_(bucket_name).get_public_url(filename)
+
+
+        # ④ DBに保存
+        data = {
+            "code_number": user_id,
+            "character_name": character_name,
+            "character_img_url": public_url,
+            "item_name":item_name
+        }
+        
+        result = supabase.table('user_operations_backup_full').insert(data).execute()
+        
+        if result.data:
+            return {
+                "success": True,
+                "data": result.data[0],
+                "message": "キャラクター情報を保存しました"
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.error,
+                "message": "データベース保存に失敗しました"
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"保存エラー: {str(e)}"
+        }
 
 
 # メイン画面に戻る関数
@@ -354,20 +423,59 @@ def main_app():
             "福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県",
             "沖縄県"
         ]
-        selected_pref = st.selectbox("都道府県を選択", prefectures, index=12 ,key="todoufuken")
+        selected_pref = st.selectbox("都道府県を選択。", prefectures, index=12 ,key="todoufuken")
 
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
+            # 生成ボタン
             if st.button("✨ 生成する", use_container_width=True):
-                    generate_character_image()  # 戻り値を受け取る
-                    st.button("保存する",type="primary")
-                    st.button("保存しない")
+                region, character_name, image, image_base64, item_name= generate_character_image()
+                st.session_state["region"] = region
+                st.session_state["character_name"] = character_name
+                st.session_state["image"] = image
+                st.session_state["image_base64"] = image_base64
+                st.session_state["item_name"] = item_name
+            
+            # 生成済み情報がある場合だけ保存ボタンを表示
+            if "character_name" in st.session_state and "image" in st.session_state:
+                user_id = st.session_state.user.id
+                        
+                # 保存する
+                if st.button("保存する", type="primary"):
+                    region = st.session_state["region"]
+                    character_name = st.session_state["character_name"]
+                    image_base64 = st.session_state["image_base64"]
+                    item_name = st.session_state["item_name"]
+                    bucket_name = "character-images"
+                    result = save_character_to_database(supabase,bucket_name,user_id, character_name,image_base64,item_name)
+                    if result["success"]:
+                        st.success(result["message"])
+                    else:
+                        st.error(result["message"])                    
+                    # 保存後に生成情報をセッションから削除
+                    for key in ["region", "character_name", "image"]:
+                        if key in st.session_state:
+                            del st.session_state[key]
+            
+            
+                # 保存しない
+                if st.button("保存しない", type="secondary"):
+                    # セッション情報を破棄
+                    for key in ["region", "character_name", "image"]:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.info("生成した情報を破棄しました")         
+            
+                
+                                          
+                
 
+                    
         st.markdown("---")
         if st.button("⬅️ メイン画面へ戻る"):
             go_to("main")
-
-
+                    
+                    
     # --- 図鑑画面 ---
     elif st.session_state.page == "zukan":
         st.title("📖 図鑑")
