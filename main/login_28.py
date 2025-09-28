@@ -1,4 +1,4 @@
-import os, io, re, json, base64, zipfile, random
+import os, io, re, json, base64, zipfile, random, time
 from PIL import Image #画像ファイルを使用する（バーコード読み込み時や画像生成時）
 import streamlit as st #streamlitを使う
 #いったん無視
@@ -15,6 +15,7 @@ import requests
 
 
 #画像保存で使う
+import uuid
 import time
 from io import BytesIO
 
@@ -99,6 +100,180 @@ def lookup_by_code(jan_code: str, hits: int = 1):
         st.error(f"JANコード検索エラー: {e}")
         return None
 
+# 完全Auth UID統一版のヘルパー関数
+
+def sanitize_filename(filename: str) -> str:
+    """
+    ファイル名を安全な形式に変換（日本語文字を除去し、英数字とアンダースコアのみに）
+    """
+    # 日本語文字を除去し、英数字・アンダースコア・ハイフンのみを残す
+    import string
+    safe_chars = string.ascii_letters + string.digits + '_-'
+    sanitized = ''.join(c if c in safe_chars else '_' for c in filename)
+    
+    # 連続するアンダースコアを単一に変換
+    while '__' in sanitized:
+        sanitized = sanitized.replace('__', '_')
+    
+    # 先頭と末尾のアンダースコアを削除
+    sanitized = sanitized.strip('_')
+    
+    # 空文字列の場合はデフォルト名を使用
+    if not sanitized:
+        sanitized = 'character'
+    
+    return sanitized
+
+
+def upload_character_image_to_storage(image: Image, character_name: str, barcode: str) -> str:
+    """
+    キャラクター画像をSupabaseストレージにアップロードし、パブリックURLを返す
+    """
+    try:
+        # 画像をバイト配列に変換
+        img_buffer = io.BytesIO()
+        image.save(img_buffer, format='PNG')
+        img_bytes = img_buffer.getvalue()
+        
+        # ファイル名を生成（ユニークになるように、日本語を安全な形式に変換）
+        user_id = st.session_state.user.id
+        timestamp = int(time.time())
+        safe_character_name = sanitize_filename(character_name)
+        filename = f"characters/{user_id}_{barcode}_{timestamp}_{safe_character_name}.png"
+        
+        # ファイル名変換情報
+        with st.expander("🔍 画像保存の詳細"):
+            st.write(f"**元のキャラクター名**: {character_name}")
+            st.write(f"**安全なファイル名**: {safe_character_name}")
+            st.write(f"**保存パス**: {filename}")
+        
+        # Supabaseストレージにアップロード
+        response = supabase.storage.from_('character-images').upload(filename, img_bytes, {
+            'content-type': 'image/png',
+            'upsert': 'false'
+        })
+        
+        # アップロード成功判定（エラーチェック）
+        if hasattr(response, 'error') and response.error:
+            st.error(f"❌ 画像アップロードに失敗しました")
+            st.error(f"🔍 エラー詳細: {response.error}")
+            st.error(f"📁 試行ファイル名: {filename}")
+            return None
+        
+        # パブリックURLを取得（文字列として直接返される）
+        public_url = supabase.storage.from_('character-images').get_public_url(filename)
+        st.success(f"✅ 画像アップロード成功: {character_name}")
+        
+        return public_url
+            
+    except Exception as e:
+        st.error(f"画像アップロードエラー: {str(e)}")
+        return None
+
+def create_user_profile_unified(auth_user_id: str, email: str, full_name: str = ""):
+    """
+    完全統一版：Auth UIDをそのままuser_idとして使用してプロフィール作成
+    """
+    try:
+        profile_data = {
+            "user_id": auth_user_id,  # Auth UIDをそのままuser_idとして使用
+            "mail_address": email,
+            "user_name": full_name or email.split('@')[0],
+            "location": ""
+        }
+        
+        response = supabase.table('users').insert(profile_data).execute()
+        return response.data[0] if response.data else None
+        
+    except Exception as e:
+        st.error(f"プロフィール作成エラー: {str(e)}")
+        return None
+
+def get_user_profile_unified(auth_user_id: str):
+    """
+    完全統一版：Auth UIDで直接プロフィール取得
+    """
+    try:
+        response = supabase.table('users').select('*').eq('user_id', auth_user_id).execute()
+        return response.data[0] if response.data else None
+    except Exception:
+        return None
+
+#画像を保存する用の関数
+def save_character_to_db_unified(character_data: dict, character_image: Image = None):
+    """
+    完全統一版：Auth UIDを直接使用してキャラクター保存（画像アップロード機能付き）
+    """
+    if 'user' not in st.session_state or not st.session_state.user:
+        st.error("認証情報が見つかりません")
+        return False
+    
+    try:
+        # Auth UIDを直接使用
+        character_data["user_id"] = st.session_state.user.id
+        
+        # ユーザー情報確認
+        with st.expander("🔍 保存情報の詳細"):
+            st.write(f"**ユーザーID**: {st.session_state.user.id[:8]}...")
+            st.write(f"**メールアドレス**: {st.session_state.user.email}")
+            st.info("💡 RLS無効化により直接保存可能")
+        
+        # 画像をストレージにアップロード
+        if character_image:
+            character_name = character_data.get('character_name', 'unknown')
+            barcode = character_data.get('code_number', 'unknown')
+            
+            with st.spinner('画像をアップロード中...'):
+                image_url = upload_character_image_to_storage(character_image, character_name, barcode)
+            
+            if image_url:
+                character_data["character_img_url"] = image_url
+                st.success(f"✅ 画像アップロード完了: {character_name}")
+            else:
+                st.error("❌ 画像アップロードに失敗しました")
+                return False
+        
+        # データベースに保存
+        with st.spinner("📦 データベースに保存中..."):
+            response = supabase.table('user_operations').insert(character_data).execute()
+        
+        # 詳細情報（エクスパンダー内に格納）
+        with st.expander("🔍 保存データの詳細"):
+            st.json(character_data)
+            if hasattr(response, 'error') and response.error:
+                st.error(f"保存エラー: {response.error}")
+            else:
+                st.success("✅ データベース保存成功")
+        
+        if response.data:
+            st.success("🎉 キャラクターを図鑑に保存しました！")
+            return True
+        else:
+            st.error("キャラクター保存に失敗しました")
+            if hasattr(response, 'error'):
+                st.error(f"詳細エラー: {response.error}")
+            return False
+            
+    except Exception as e:
+        st.error(f"キャラクター保存エラー: {str(e)}")
+        return False
+
+#図鑑で表示する関数
+def get_user_characters_unified():
+    """
+    完全統一版：Auth UIDで直接キャラクター一覧を取得
+    """
+    if 'user' not in st.session_state or not st.session_state.user:
+        return []
+    
+    try:
+        auth_user_id = st.session_state.user.id
+        response = supabase.table('user_operations').select('*').eq('user_id', auth_user_id).order('created_at', desc=True).execute()
+        return response.data if response.data else []
+        
+    except Exception as e:
+        st.error(f"キャラクター取得エラー: {str(e)}")
+        return []
 
 
 # 画像生成する関数
@@ -111,7 +286,7 @@ def generate_character_image(product_json):
     # 2. OpenAIでプロンプト生成
     region = st.session_state.todoufuken
     if not region:
-        st.error("都道府県を入力してください")
+        st.error("都道府県を選択してください")
         return  None, None, None, None, None
 
     prompt_for_gpt = f"""
@@ -147,152 +322,109 @@ def generate_character_image(product_json):
     Character Name: <ここにキャラクター名>
     """
     
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "あなたはアニメ風キャラクター化用プロンプト作成の専門家です。"},
-            {"role": "user", "content": prompt_for_gpt + "\n\n必ず以下の形式で出力してください:\nPrompt: <英語のプロンプト>\nCharacter Name: <カタカナ8文字以内>"}
-        ],
-        max_tokens=200
-    )
-
-    generated_text = response.choices[0].message.content.strip()
-    lines = generated_text.splitlines()
-    sd_prompt = ""
-    character_name = ""
-    collecting_prompt = False
-    for line in lines:
-        lower_line = line.lower().strip()
-        if lower_line.startswith("prompt:"):
-            # Prompt: の行から収集開始
-            sd_prompt = line.split(":", 1)[1].strip()
-            collecting_prompt = True
-        elif lower_line.startswith("character name:"):
-            character_name = line.split(":", 1)[1].strip()
-            collecting_prompt = False
-        elif collecting_prompt:
-            # Prompt: の続き（改行で複数行ある場合）
-            sd_prompt += " " + line.strip()    
-
-    if not sd_prompt:
-        st.write("=== lines ===")
-        st.write(lines)
-        st.error("OpenAIでプロンプト生成に失敗しました")
-        return  None, None, None, None, None
-
-    # 3. Stability AIで画像生成
-    stability_prompt = f"""{sd_prompt}"""
-    response = requests.post(
-        f"{stability_api_host}/v1/generation/{engine_id}/text-to-image",
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {stability_api_key}"
-        },
-        json={
-             "style_preset": "anime",
-            "text_prompts": [
-            {
-                "text": f"{stability_prompt}"
-            }
-        ],
-            "cfg_scale": 7,
-            "height": 1024,
-            "width": 1024,
-            "samples": 1,
-            "steps": 30,
-        },
-    )
-
-    if response.status_code != 200:
-        st.error(f"APIエラーが発生しました。ステータスコード: {response.status_code}\n内容: {response.text}")
-        return None, None, None, None, None
-    
-    if character_name == "":
-        character_name = "名前なし"
-    
-
-
-    #キャラ出力
-    data = response.json()
-    image_base64 = data["artifacts"][0]["base64"]
-    image_bytes = base64.b64decode(image_base64)
-    image = Image.open(BytesIO(image_bytes))
-    st.success(f"🎉 新キャラを獲得！")
-    st.markdown(f'''キャラクター名： :blue[{character_name}]''')
-    st.image(image, use_container_width=True)
-    st.write(f"キャラ詳細")
-    st.write(f"{sd_prompt}")
-    st.write(f"居住地：{region}")
-
-    return region, character_name,image,image_base64,item_name,
-
-#生成情報を保存する関数
-def save_character_to_database(supabase, bucket_name,user_id,character_name, image_base64,item_name):
-    """
-    キャラクター情報をuser_operationsテーブルに保存
-    
-    Args:
-        user_id: ユーザーID
-        character_name: キャラクター名
-        image_url: 画像URL
-        item_name：商品名
-        
-    Returns:
-        dict: 保存結果
-    """
     try:
-        # ① Base64 → PNG に変換
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "あなたはアニメ風キャラクター化用プロンプト作成の専門家です。"},
+                {"role": "user", "content": prompt_for_gpt + "\n\n必ず以下の形式で出力してください:\nPrompt: <英語のプロンプト>\nCharacter Name: <カタカナ8文字以内>"}
+            ],
+            max_tokens=200
+        )
+
+        generated_text = response.choices[0].message.content.strip()
+        
+        # デバッグ用: OpenAIの応答を表示
+        with st.expander("🔍 OpenAI応答の詳細"):
+            st.write("**生成されたテキスト:**")
+            st.code(generated_text)
+        
+        lines = generated_text.splitlines()
+        sd_prompt = ""
+        character_name = ""
+        collecting_prompt = False
+        
+        for line in lines:
+            line = line.strip()
+            lower_line = line.lower()
+            
+            if lower_line.startswith("prompt:"):
+                # Prompt: の行から収集開始
+                sd_prompt = line.split(":", 1)[1].strip()
+                collecting_prompt = True
+            elif lower_line.startswith("character name:"):
+                character_name = line.split(":", 1)[1].strip()
+                collecting_prompt = False
+            elif "name:" in lower_line and not character_name:
+                # より柔軟なキャラクター名抽出
+                character_name = line.split(":", 1)[1].strip()
+                collecting_prompt = False
+            elif collecting_prompt and line:
+                # Prompt: の続き（改行で複数行ある場合）
+                sd_prompt += " " + line
+        
+        # キャラクター名が見つからない場合、デフォルト名を生成
+        if not character_name:
+            character_name = f"キャラ{random.randint(1000, 9999)}"    
+
+        # デバッグ情報
+        with st.expander("🔍 抽出結果"):
+            st.write(f"**プロンプト**: {sd_prompt}")
+            st.write(f"**キャラクター名**: {character_name}")
+
+        if not sd_prompt:
+            st.error("OpenAIでプロンプト生成に失敗しました")
+            return None, None, None
+
+        # 3. Stability AIで画像生成
+        stability_prompt = f"""{sd_prompt}"""
+        response = requests.post(
+            f"{stability_api_host}/v1/generation/{engine_id}/text-to-image",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {stability_api_key}"
+            },
+            json={
+                 "style_preset": "anime",
+                "text_prompts": [
+                {
+                    "text": f"{stability_prompt}"
+                }
+            ],
+                "cfg_scale": 7,
+                "height": 1024,
+                "width": 1024,
+                "samples": 1,
+                "steps": 30,
+            },
+        )
+
+        if response.status_code != 200:
+            st.error(f"APIエラーが発生しました。ステータスコード: {response.status_code}\n内容: {response.text}")
+            return None, None, None
+        
+        #キャラ出力
+        data = response.json()
+        image_base64 = data["artifacts"][0]["base64"]
         image_bytes = base64.b64decode(image_base64)
         image = Image.open(BytesIO(image_bytes))
-        png_buffer = BytesIO()
-        image.save(png_buffer, format="PNG")
-        png_buffer.seek(0)
-
-        # ② Storage にアップロード
-        filename = f"{user_id}_{int(time.time())}.png"
-        upload_result = supabase.storage.from_(bucket_name).upload(
-            filename,
-            png_buffer.getvalue(),
-            {"content-type": "image/png"}  # MIMEタイプを明示
-        )
         
-        if hasattr(upload_result, "error") and upload_result.error:
-            return {"success": False, "message": f"アップロードに失敗: {upload_result.error}"}
-
-        # ③ 公開URLを取得
-        public_url = supabase.storage.from_(bucket_name).get_public_url(filename)
-
-
-        # ④ DBに保存
-        data = {
-            "user_id": user_id,
-            "character_name": character_name,
-            "character_img_url": public_url,
-            "item_name":item_name
+        # セッション状態に保存
+        st.session_state.generated_character = {
+            'prompt': sd_prompt,
+            'name': character_name,
+            'image': image,
+            'barcode': product_json['codeNumber'],
+            'item_name': product_json['itemName'],
+            'region': region
         }
         
-        result = supabase.table('user_operations_backup_full').insert(data).execute()
-        
-        if result.data:
-            return {
-                "success": True,
-                "data": result.data[0],
-                "message": "キャラクター情報を保存しました"
-            }
-        else:
-            return {
-                "success": False,
-                "error": result.error,
-                "message": "データベース保存に失敗しました"
-            }
-            
+        # 表示は呼び出し元で行う
+        return sd_prompt, character_name, image
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"保存エラー: {str(e)}"
-        }
+        st.error(f"キャラクター生成エラー: {str(e)}")
+        return None, None, None
 
 
 # メイン画面に戻る関数
@@ -301,7 +433,7 @@ def go_to(page_name):
     st.rerun()    
 
 
-# ログイン画面｜これらはcreate_clientを使うことで呼び出される関数である。
+# ログイン画面
 def sign_up(email, password):
     return supabase.auth.sign_up({"email": email, "password": password})
 
@@ -318,7 +450,7 @@ def login_signup_page():
     tab1,tab2 = st.tabs(["ログイン","新規会員登録"])
     
     with tab1:
-        email = st.text_input("メールアドレス", key="login_email") #session_state.login_emailが使えるようになる。
+        email = st.text_input("メールアドレス", key="login_email")
         password = st.text_input("パスワード",type="password",key="login_password")
         if st.button("ログインする",type="primary"):
             try:
@@ -326,9 +458,16 @@ def login_signup_page():
                 user = res.user
                 if user :
                     st.session_state.user = user
-                    st.session_state.full_name = user.user_metadata.get("full_name", user.email)
-                    st.success("ログインに成功しました")
-                    st.rerun()
+                    
+                    # プロフィール取得（完全統一版）
+                    profile = get_user_profile_unified(user.id)
+                    if profile:
+                        st.session_state.user_profile = profile
+                        st.session_state.full_name = profile.get("user_name", user.email)
+                        st.success("ログインに成功しました")
+                        st.rerun()
+                    else:
+                        st.error("プロフィールが見つかりません。新規登録が必要かもしれません。")
                 else:
                     st.error("userを取得できずにログインに失敗しました")
             except Exception as e:
@@ -352,32 +491,53 @@ def login_signup_page():
                         }
                     }
                 })
-                st.success("アカウントが作成されました。メールを確認してください。※登録済みの場合はメールが送信されません。")
+                
+                if response.user:
+                    # 完全統一版プロフィール作成
+                    profile = create_user_profile_unified(response.user.id, new_email, new_name)
+                    if profile:
+                        st.success("アカウントとプロフィールが作成されました。ログインしてください。")
+                        st.info("✨ Auth UID = DB user_id で完全統一されました！")
+                    else:
+                        st.error("プロフィール作成に失敗しました。")
+                else:
+                    st.success("アカウントが作成されました。メールを確認してください。")
 
             except AuthApiError as e:
-                # e.code があれば取得
                 code = getattr(e, "code", None)
                 message = str(e)
-                status = getattr(e, "status_code", None)  # or whatever属性があれば
-
-                st.write("error message:", message)
-                st.write("error code property:", code)
-                st.write("status code:", status)
-            
-                if "already" in code:
+                
+                if "already" in str(code):
                     st.error("このメールアドレスはすでに登録済みです。")
-                elif "validation" in code:
+                elif "validation" in str(code):
                    st.error("メールアドレスの書き方不適切です。")
                 else:
-                    st.error("その他のエラー: " + message)
-            
-
+                    st.error(f"その他のエラー: {message}")
 
 #メイン画面
 
 def main_app():
-    # full_name があればそれを、なければ email を表示
-    name_to_display = st.session_state.get("full_name", st.session_state.user.email)
+    # プロフィール情報表示
+    if 'user_profile' in st.session_state and st.session_state.user_profile:
+        name_to_display = st.session_state.user_profile.get("user_name", st.session_state.user.email)
+        # ユーザー情報をサイドバーに表示
+        st.sidebar.success(f"👋 {name_to_display}さん")
+        st.sidebar.write(f"📧 {st.session_state.user_profile.get('mail_address')}")
+        if st.session_state.user_profile.get('location'):
+            st.sidebar.write(f"📍 {st.session_state.user_profile.get('location')}")
+        
+        # 完全統一版デバッグ情報
+        with st.sidebar.expander("🔧 完全統一版情報"):
+            st.write(f"**Auth UID**: {st.session_state.user.id[:8]}...")
+            st.write(f"**DB user_id**: {st.session_state.user_profile['user_id'][:8]}...")
+            
+            # IDの一致確認
+            ids_match = st.session_state.user.id == st.session_state.user_profile['user_id']
+            match_status = "✅ 一致" if ids_match else "❌ 不一致"
+            st.write(f"**ID統一**: {match_status}")
+    else:
+        name_to_display = st.session_state.user.email if 'user' in st.session_state else "ユーザー"
+    
     st.subheader(f"{name_to_display} さん、おかえりなさい！")
 
     if "page" not in st.session_state:
@@ -459,7 +619,7 @@ def main_app():
             "福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県",
             "沖縄県"
         ]
-        selected_pref = st.selectbox("都道府県を選択。", prefectures, index=12 ,key="todoufuken")
+        selected_pref = st.selectbox("都道府県を選択", prefectures, index=12 ,key="todoufuken")
 
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
@@ -491,63 +651,116 @@ def main_app():
                 st.session_state["last_product_json"] = product_json
 
                  # 5) 生成
-                region, character_name, image, image_base64, item_name= generate_character_image(product_json)
-                st.session_state["region"] = region
-                st.session_state["character_name"] = character_name
-                st.session_state["image"] = image
-                st.session_state["image_base64"] = image_base64
-                st.session_state["item_name"] = item_name
-            
-            # 生成済み情報がある場合だけ保存ボタンを表示
-            if "character_name" in st.session_state and "image" in st.session_state:
-                user_id = st.session_state.user.id
-                        
-                # 保存する
-                if st.button("保存する", type="primary"):
-                    region = st.session_state["region"]
-                    character_name = st.session_state["character_name"]
-                    image_base64 = st.session_state["image_base64"]
-                    item_name = st.session_state["item_name"]
-                    bucket_name = "character-images"
-                    result = save_character_to_database(supabase,bucket_name,user_id, character_name,image_base64,item_name)
-                    if result["success"]:
-                        st.success(result["message"])
-                    else:
-                        st.error(result["message"])                    
-                    # 保存後に生成情報をセッションから削除
-                    for key in ["region", "character_name", "image"]:
-                        if key in st.session_state:
-                            del st.session_state[key]
-            
-            
-                # 保存しない
-                if st.button("保存しない", type="secondary"):
-                    # セッション情報を破棄
-                    for key in ["region", "character_name", "image"]:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    st.info("生成した情報を破棄しました")         
-            
-                
-                                          
-                
+                prompt, name, image = generate_character_image(product_json)
+                if prompt and name and image:
+                        # 生成成功時は生成フラグを立てる
+                        st.session_state.character_generated = True
+                        st.rerun()  # ページを再読み込みして保存ボタンを表示
 
-                    
+            # キャラクターが生成済みの場合、表示と保存ボタンを表示
+            if st.session_state.get('character_generated') and st.session_state.get('generated_character'):
+                character_info = st.session_state.generated_character
+                
+                st.success(f"🎉 新キャラを獲得！")
+                st.markdown(f'''キャラクター名： :blue[{character_info.get('name', '名前不明')}]''')
+                st.image(character_info['image'], use_container_width=True)
+                st.write(f"**キャラ詳細**")
+                st.write(f"{character_info.get('prompt', '')}")
+                st.write(f"**居住地**: {character_info.get('region', '')}")
+                
+                # 保存ボタンを表示
+                col_save1, col_save2 = st.columns(2)
+                with col_save1:
+                    if st.button("💾 保存する", type="primary"):
+                        # キャラクターデータをデータベースに保存（完全統一版・画像アップロード対応）
+                        character_data = {
+                            "code_number": character_info['barcode'],
+                            "item_name": character_info['item_name'],
+                            "character_name": character_info['name'],
+                            "character_parameter": {
+                                "prompt": character_info['prompt'],
+                                "region": character_info['region'],
+                                "power": random.randint(50, 100),
+                                "attack": random.randint(30, 90),
+                                "defense": random.randint(20, 80),
+                                "speed": random.randint(40, 95)
+                            }
+                        }
+                        
+                        # 画像も一緒に保存
+                        character_image = character_info['image']
+                        
+                        if save_character_to_db_unified(character_data, character_image):
+                            # セッション状態の文字配列にも追加（表示用）
+                            st.session_state.characters.append({
+                                'name': character_info['name'],
+                                'barcode': character_info['barcode'],
+                                'type': 'JAN',
+                                'region': character_info['region'],
+                                'power': character_data['character_parameter']['power']
+                            })
+                            st.success("🎉 図鑑に登録されました！")
+                            st.info("💫 画像もSupabaseストレージに保存されました")
+                            
+                            # 生成フラグをリセット
+                            st.session_state.character_generated = False
+                            st.session_state.generated_character = None
+                            
+                with col_save2:
+                    if st.button("🚫 保存しない"):
+                        st.info("保存をキャンセルしました")
+                        # 生成フラグをリセット
+                        st.session_state.character_generated = False
+                        st.session_state.generated_character = None
+                        st.rerun()
+
         st.markdown("---")
         if st.button("⬅️ メイン画面へ戻る"):
             go_to("main")
                     
                     
     # --- 図鑑画面 ---
+# --- 図鑑画面 ---
     elif st.session_state.page == "zukan":
-        st.title("📖 図鑑")
-        if st.session_state.characters:
-            for idx, char in enumerate(st.session_state.characters, start=1):
-                st.write(f"### {idx}. {char['name']}")
-                st.write(f"バーコード: {char['barcode']} (種類: {char['type']})")
-                st.write(f"地域: {char['region']}")
-                st.write(f"強さ: {char['power']}")
-                st.divider()
+        st.title("📖 図鑑（完全統一版）")
+        
+        # データベースからキャラクター一覧を取得（完全統一版）
+        db_characters = get_user_characters_unified()
+        
+        if db_characters:
+            st.write(f"**登録済みキャラクター数**: {len(db_characters)}体")
+            st.info("💡 Auth UID = DB user_id で管理されています")
+            
+            for idx, char in enumerate(db_characters, start=1):
+                with st.expander(f"{idx}. {char.get('character_name', '無名キャラ')} - {char.get('item_name', '不明アイテム')}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if char.get('character_img_url'):
+                            try:
+                                st.image(char['character_img_url'], width=200, caption=char.get('character_name', '名前なし'))
+                                st.caption(f"🔗 画像URL: {char['character_img_url'][:50]}...")
+                            except Exception as e:
+                                st.write("🖼️ 画像を表示できませんでした")
+                                st.caption(f"エラー: {str(e)}")
+                                st.caption(f"URL: {char.get('character_img_url', 'なし')}")
+                        else:
+                            st.write("🖼️ 画像なし")
+                    
+                    with col2:
+                        st.write(f"**バーコード**: {char.get('code_number', 'N/A')}")
+                        st.write(f"**ユーザーID**: {char.get('user_id', 'N/A')[:8]}...（Auth UID）")
+                        
+                        if char.get('character_parameter'):
+                            params = char['character_parameter']
+                            if isinstance(params, dict):
+                                st.write("**ステータス**:")
+                                for key, value in params.items():
+                                    if key in ['power', 'attack', 'defense', 'speed']:
+                                        st.write(f"- {key}: {value}")
+                                    elif key == 'region':
+                                        st.write(f"**出身地**: {value}")
+                        
+                        st.write(f"**作成日**: {char.get('created_at', 'N/A')}")
         else:
             st.info("まだキャラクターがいません。スキャンしてみましょう！")
             
@@ -569,6 +782,16 @@ def check_auth():
 #mainとは 起動時にcheckがFalseであればlogin_signup_pageを起動し、Trueでればmain_appを起動すること。
 
 def main():
+    st.set_page_config(
+        page_title="令和版バーコードバトラー（完全Auth UID統一版）",
+        page_icon="📱",
+        layout="wide"
+    )
+    
+    if not check_auth():
+        login_signup_page()
+    else:
+        main_app()
     if not check_auth():
         login_signup_page()
     else:
