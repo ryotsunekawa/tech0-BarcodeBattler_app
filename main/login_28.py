@@ -521,8 +521,6 @@ def main_app():
         # ユーザー情報をサイドバーに表示
         st.sidebar.success(f"👋 {name_to_display}さん")
         st.sidebar.write(f"📧 {st.session_state.user_profile.get('mail_address')}")
-        if st.session_state.user_profile.get('location'):
-            st.sidebar.write(f"📍 {st.session_state.user_profile.get('location')}")
         
         # 完全統一版デバッグ情報
         with st.sidebar.expander("🔧 完全統一版情報"):
