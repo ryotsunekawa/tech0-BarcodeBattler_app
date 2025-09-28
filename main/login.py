@@ -655,13 +655,13 @@ def main_app():
                     st.write(f"**居住地**: {character_info.get('region', '')}")
                     st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
                     # ステータス表示
-                    params = character_info.get('character_parameter')
-                    if isinstance(params, dict):
-                        st.write("**ステータス**:")
-                        for key in ['power', 'attack', 'defense', 'speed']:
-                            value = params.get(key)
-                            if value is not None:
-                                st.write(f"- {key}: {value}")
+                    if character_info.get('character_parameter'):
+                        params = character_info['character_parameter']
+                        if isinstance(params, dict):
+                            st.write("**ステータス**:")
+                            for key, value in params.items():
+                                if key in ['power', 'attack', 'defense', 'speed']:
+                                    st.write(f"- {key}: {value}")
 
 
                 with st.expander("🔍 JANコード詳細"):
