@@ -99,9 +99,6 @@ def lookup_by_code(jan_code: str, hits: int = 1):
         st.error(f"JANコード検索エラー: {e}")
         return None
 
-
-
-
 # 完全Auth UID統一版のヘルパー関数
 
 def sanitize_filename(filename: str) -> str:
@@ -262,17 +259,188 @@ def get_user_characters_unified():
 
 
 # 画像生成する関数stabilityai
+def generate_character_image_stability(product_json):
+    # 1. 商品情報取得
+
+    # 2. OpenAIでプロンプト生成
+    region = st.session_state.todoufuken
+    if not region:
+        st.error("都道府県を選択してください")
+        return  None, None, None, None, None
+
+    prompt_for_gpt = f"""
+    以下の商品情報をもとに、アニメ風キャラクターをStable Diffusionで生成するための
+    使える英語のテキストプロンプトを作成してください。
+    
+    キャラクターは商品「{product_json['itemName']}」を擬人化したもので、
+    地域「{region}」のイメージを反映させます。
+    
+    キャラクターはデフォルメ強めのコミカルな「ちびキャラ（SDキャラ）」風で、
+    レトロなカードバトルゲーム風イラストとして表現してください。
+    太めのアウトライン、カラフルで派手な色彩、能力値や属性を感じさせる雰囲気を持たせてください。
+    
+    以下の要素を必ず英語プロンプトに含めてください：
+    - **性格**：キャラクターの性格を具体的に描写（例：勇敢で元気、清潔感がある、戦闘好きなど）
+    - **服装**：RPGキャラクター風の衣装。商品名を連想させるデザインを取り入れる
+    - **小物・持ち物**：商品名をモチーフにしたデフォルメ武器・防具を装備
+    - **姿勢**：戦闘ポーズ（カードバトルゲーム風の構え）
+    - **背景**：地域の特徴（自然や建物など）を取り入れた、カードゲーム用イラスト風背景
+    - **演出**：戦闘力や特殊技を発動しそうなエフェクト（光、オーラ、数字的な力を感じさせる演出）
+    
+    また、このキャラクターに合う短く覚えやすいキャラクター名も作成してください。
+    キャラクター名はカタカナで8文字以内でお願いします。
+    
+    
+    商品情報：
+    - 商品名: {product_json['itemName']}
+    - メーカー: {product_json['makerName']}
+    - 商品画像URL: {product_json['itemImageUrl']}
+    
+    ※結果は以下の形式で出力してください：
+    Prompt: <ここに英語のプロンプト>
+    Character Name: <ここにキャラクター名>
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "あなたはアニメ風キャラクター化用プロンプト作成の専門家です。"},
+                {"role": "user", "content": prompt_for_gpt + "\n\n必ず以下の形式で出力してください:\nPrompt: <英語のプロンプト>\nCharacter Name: <カタカナ8文字以内>"}
+            ],
+            max_tokens=200
+        )
+
+        generated_text = response.choices[0].message.content.strip()
+        
+        
+        lines = generated_text.splitlines()
+        sd_prompt = ""
+        character_name = ""
+        collecting_prompt = False
+        
+        for line in lines:
+            line = line.strip()
+            lower_line = line.lower()
+            
+            if lower_line.startswith("prompt:"):
+                # Prompt: の行から収集開始
+                sd_prompt = line.split(":", 1)[1].strip()
+                collecting_prompt = True
+            elif lower_line.startswith("character name:"):
+                character_name = line.split(":", 1)[1].strip()
+                collecting_prompt = False
+            elif "name:" in lower_line and not character_name:
+                # より柔軟なキャラクター名抽出
+                character_name = line.split(":", 1)[1].strip()
+                collecting_prompt = False
+            elif collecting_prompt and line:
+                # Prompt: の続き（改行で複数行ある場合）
+                sd_prompt += " " + line
+        
+        # キャラクター名が見つからない場合、デフォルト名を生成
+        if not character_name:
+            character_name = f"キャラ{random.randint(1000, 9999)}"    
+
+        if not sd_prompt:
+            st.error("OpenAIでプロンプト生成に失敗しました")
+            return None, None, None
+
+        # 3. Stability AIで画像生成
+        stability_prompt = f"""{sd_prompt}"""
+        response = requests.post(
+            f"{stability_api_host}/v1/generation/{engine_id}/text-to-image",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {stability_api_key}"
+            },
+            json={
+                 "style_preset": "anime",
+                "text_prompts": [
+                {
+                    "text": f"{stability_prompt}"
+                }
+            ],
+                "cfg_scale": 7,
+                "height": 1024,
+                "width": 1024,
+                "samples": 1,
+                "steps": 30,
+            },
+        )
+
+        if response.status_code != 200:
+            st.error(f"APIエラーが発生しました。ステータスコード: {response.status_code}\n内容: {response.text}")
+            return None, None, None
+        
+        #キャラ出力
+        data = response.json()
+        image_base64 = data["artifacts"][0]["base64"]
+        image_bytes = base64.b64decode(image_base64)
+        image = Image.open(BytesIO(image_bytes))
+        
+        # セッション状態に保存
+        st.session_state.generated_character = {
+            'prompt': sd_prompt,
+            'name': character_name,
+            'image': image,
+            'barcode': product_json['codeNumber'],
+            'item_name': product_json['itemName'],
+            'region': region
+        }
+        
+        # 表示は呼び出し元で行う
+        return sd_prompt, character_name, image
+    except Exception as e:
+        st.error(f"キャラクター生成エラー: {str(e)}")
+        return None, None, None
+
+
 
 # 画像生成する関数OPENAI
-def generate_character_image(product_json):
+def generate_character_image_openai(product_json):
     region = st.session_state.todoufuken
     if not region:
         st.error("都道府県を選択してください")
         return None, None, None
 
-    # 2. プロンプト（日本語OK）
+    # 1. キャラクター名を生成（テキストモデル）
+    try:
+        name_prompt = f"""
+        次の商品をモチーフにしたキャラクターを考えてください。
+        商品名: {product_json['itemName']}
+        メーカー: {product_json['makerName']}
+        商品画像URL: {product_json['itemImageUrl']}
+
+
+        条件:
+        - キャラクターに合う短く覚えやすい名前
+        - カタカナで8文字以内
+        - 出力は次の形式にしてください
+        Character Name: <ここにキャラクター名>
+        """
+        name_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": name_prompt}],
+            max_tokens=20
+        )
+        character_name_text = name_response.choices[0].message.content.strip()
+
+        # Character Name: の部分を抽出
+        if "Character Name:" in character_name_text:
+            character_name = character_name_text.split(":", 1)[1].strip()
+        else:
+            character_name = f"キャラ{random.randint(1000,9999)}"
+
+    except Exception as e:
+        st.warning(f"キャラクター名生成に失敗しました: {str(e)}")
+        character_name = f"キャラ{random.randint(1000,9999)}"
+
+    # 2. 画像生成プロンプト
     sd_prompt = f"""
     商品「{product_json['itemName']}」情報をもとに、バーコードバトラー風に擬人化したキャラクターを描いてください。
+    キャラクター名は「{character_name}」です。
     キャラクターはレトロなカードバトルゲーム風イラストとして表現してください。
     キャラクターには商品画像（ {product_json['itemImageUrl']} ）のイメージを反映させてください。
 
@@ -283,24 +451,13 @@ def generate_character_image(product_json):
     - **姿勢**：カードバトルゲーム風の構え
     - **背景**：{region} の特徴（自然や建物、雰囲気など）を取り入れた、カードゲーム用イラスト風背景。
     - **演出**：戦闘力や特殊技を発動しそうなエフェクト（光、オーラ、数字的な力を感じさせる演出）
-    - **キャラクター情報**：メーカー名（ {product_json['makerName']}）のテキストをキャラクターのどこかに入れてください。
-
-    また、このキャラクターに合う短く覚えやすいキャラクター名も作成してください。
-    キャラクター名はカタカナで8文字以内でお願いします。
-
-    商品情報：
-    - 商品名: {product_json['itemName']}
-    - メーカー: {product_json['makerName']}
-    - 商品画像URL: {product_json['itemImageUrl']}
-
-    ※キャラクター名は以下の形式で出力してください：
-    Character Name: <ここにキャラクター名>
+    - **出力画像**：画像は1024x1024の正方形になるようにしてください。
     """
 
+    # 3. 画像生成（OpenAI Image API）
     try:
-        # 3. OpenAI Image APIで画像生成
         image_response = client.images.generate(
-            model="gpt-image-1",   # OpenAIの画像生成モデル
+            model="gpt-image-1",
             prompt=sd_prompt,
             size="1024x1024"
         )
@@ -308,16 +465,6 @@ def generate_character_image(product_json):
         image_base64 = image_response.data[0].b64_json
         image_bytes = base64.b64decode(image_base64)
         image = Image.open(BytesIO(image_bytes))
-
-        # キャラクター名はプロンプト内から抽出
-        character_name = ""
-        for line in sd_prompt.splitlines():
-            if line.strip().startswith("Character Name:"):
-                character_name = line.split(":", 1)[1].strip()
-                break
-
-        if not character_name:
-            character_name = f"キャラ{random.randint(1000, 9999)}"
 
         # セッション状態に保存
         st.session_state.generated_character = {
@@ -430,8 +577,6 @@ def main_app():
     # プロフィール情報表示
     if 'user_profile' in st.session_state and st.session_state.user_profile:
         name_to_display = st.session_state.user_profile.get("user_name", st.session_state.user.email)
-        # ユーザー情報をサイドバーに表示
-        st.sidebar.success(f"👋 {name_to_display}さん、こんにちは")
         
     
     else:
@@ -446,7 +591,7 @@ def main_app():
     # --- メイン画面 ---
     if st.session_state.page == "main":
         st.title("バーコードバトラー 〜Tech0 Edition〜")
-        st.write("遊び方を選んでください")
+        st.write(f"{name_to_display}さん、こんにちは！遊び方を選んでください")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -520,6 +665,16 @@ def main_app():
         ]
         selected_pref = st.selectbox("都道府県を選択", prefectures, index=12 ,key="todoufuken")
 
+        # モデルの種類選択フォームを追加
+        model_type = st.selectbox(
+            "キャラクターイメージ",
+            ["カラフルで個性的な雰囲気", "レトロで企業らしい雰囲気"],
+            index=0,
+            key="model_type"
+        )
+        st.markdown('<small>※レトロで企業らしい雰囲気は生成に時間がかかります。</small>', unsafe_allow_html=True)
+        st.write("")
+
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
             # 生成ボタン
@@ -571,14 +726,16 @@ def main_app():
                 st.session_state["last_product_json"] = product_json
                 st.success(f"🎉 JANコードの読み込み完了！")
 
-                # 5) 生成
+                # 5) モデル種類によって関数を切り替え
                 with st.spinner("キャラクターを生成中..."):
-                    prompt, name, image = generate_character_image(product_json)
+                    if model_type == "レトロで企業らしい雰囲気":
+                        prompt, name, image = generate_character_image_openai(product_json)
+                    else:
+                        prompt, name, image = generate_character_image_stability(product_json)
                 
                 if prompt and name and image:
-                    # 生成成功時は生成フラグを立てる
                     st.session_state.character_generated = True
-                    st.rerun()  # ページを再読み込みして保存ボタンを表示
+                    st.rerun()
                 
 
             # キャラクターが生成済みの場合、表示と保存ボタンを表示
@@ -654,7 +811,7 @@ def main_app():
             go_to("main")
                     
                     
-    # --- 図鑑画面 ---
+
 # --- 図鑑画面 ---
     elif st.session_state.page == "zukan":
         st.title("📖 図鑑（完全統一版）")
