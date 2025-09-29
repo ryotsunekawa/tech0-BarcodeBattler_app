@@ -672,6 +672,8 @@ def main_app():
             index=0,
             key="model_type"
         )
+        st.markdown('<small>※レトロで企業らしい雰囲気は生成に時間がかかります。</small>', unsafe_allow_html=True)
+        st.write("")
 
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
