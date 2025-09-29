@@ -673,9 +673,13 @@ def main_app():
         )
         
 
-    # --- スキャン画面 ---
+    # --- 生成画面 ---
     elif st.session_state.page == "scan":
-        st.title("📷 バーコードスキャン")
+                
+        if st.button("⬅️ メイン画面へ戻る"):
+            go_to("main")
+        st.markdown("---")
+        st.title("🎨 キャラ生成")
         img_file = st.camera_input("JANコードを撮影してください")
 
         digits, result = None, None
