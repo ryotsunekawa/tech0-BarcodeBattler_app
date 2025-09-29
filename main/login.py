@@ -810,7 +810,7 @@ def main_app():
                 st.success(f"🎉 新キャラを獲得！")
                 cp = st.session_state.get("generated_character", {}).get("combat_power")
                 if cp is not None:
-                    st.markdown(f'''名前： :blue[{character_info.get('name', '名前不明')}] 戦闘力 :blue[{cp}]''')
+                    st.markdown(f'''名前： :blue[{character_info.get('name', '名前不明')}] 　（戦闘力：{cp}）''')
                 st.image(character_info['image'], use_container_width=True)
 
                 with st.expander("🔍 キャラ詳細"):
