@@ -506,7 +506,7 @@ def main_app():
 
     # --- メイン画面 ---
     if st.session_state.page == "main":
-        st.title("📚 バーコードキャラクター図鑑")
+        st.title("バーコードバトラー~Tech0 Edition~")
         st.write("遊び方を選んでください")
 
         col1, col2 = st.columns(2)
