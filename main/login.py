@@ -99,6 +99,46 @@ def lookup_by_code(jan_code: str, hits: int = 1):
         st.error(f"JANコード検索エラー: {e}")
         return None
 
+# === 戦闘力ロジック（最終版） ===
+def combat_power_from_jan(jan_raw: str) -> int:
+    """JANコード13桁から戦闘力を計算する"""
+    jan = "".join(ch for ch in str(jan_raw) if ch.isdigit())
+    if len(jan) != 13:
+        return 0  # 13桁でない場合は0
+
+    digits = [int(ch) for ch in jan]
+
+    # ベース戦闘力：合計値 % 100 * 100
+    base = (sum(digits) % 100) * 100
+
+    bonus = 0
+
+    # ぞろ目（同じ数字が3連続以上）
+    for i in range(len(digits) - 2):
+        if digits[i] == digits[i+1] == digits[i+2]:
+            bonus += 1000
+            break
+
+    # 連番（123, 456, …, 890, 901, 012）
+    seqs = ["123","234","345","456","567","678","789","890","901","012"]
+    for i in range(len(jan) - 2):
+        if jan[i:i+3] in seqs:
+            bonus += 500
+            break
+
+    # 下二桁が "00"
+    if jan.endswith("00"):
+        bonus += 2000
+
+    # 偶数が全体の半分以上
+    even_count = sum(1 for d in digits if d % 2 == 0)
+    if even_count >= len(digits) / 2:
+        bonus += 300
+
+    total = base + bonus
+    return min(total, 13700)  # 上限
+
+
 # 完全Auth UID統一版のヘルパー関数
 
 def sanitize_filename(filename: str) -> str:
@@ -262,6 +302,10 @@ def get_user_characters_unified():
 def generate_character_image_stability(product_json):
     # 1. 商品情報取得
 
+    # === 戦闘力の計算 ===
+    jan_code = str(product_json.get("codeNumber", "")).strip()
+    combat_power = combat_power_from_jan(jan_code)
+
     # 2. OpenAIでプロンプト生成
     region = st.session_state.todoufuken
     if not region:
@@ -387,19 +431,24 @@ def generate_character_image_stability(product_json):
             'image': image,
             'barcode': product_json['codeNumber'],
             'item_name': product_json['itemName'],
-            'region': region
+            'region': region,
+            'combat_power': combat_power,
         }
         
         # 表示は呼び出し元で行う
-        return sd_prompt, character_name, image
+        return sd_prompt, character_name, image, combat_power
     except Exception as e:
         st.error(f"キャラクター生成エラー: {str(e)}")
-        return None, None, None
+        return None, None, None, None
 
 
 
 # 画像生成する関数OPENAI
 def generate_character_image_openai(product_json):
+    # === 戦闘力の計算 ===
+    jan_code = str(product_json.get("codeNumber", "")).strip()
+    combat_power = combat_power_from_jan(jan_code)
+
     region = st.session_state.todoufuken
     if not region:
         st.error("都道府県を選択してください")
@@ -473,10 +522,11 @@ def generate_character_image_openai(product_json):
             'image': image,
             'barcode': product_json['codeNumber'],
             'item_name': product_json['itemName'],
-            'region': region
+            'region': region,
+            'combat_power': combat_power,
         }
 
-        return sd_prompt, character_name, image
+        return sd_prompt, character_name, image, combat_power
 
     except Exception as e:
         st.error(f"キャラクター生成エラー: {str(e)}")
@@ -595,18 +645,23 @@ def main_app():
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📷 スキャン画面へ", key="scan_btn"):
+            if st.button("🎨 キャラ生成", key="scan_btn", use_container_width=True):
                 go_to("scan")
+        
         with col2:
-            if st.button("📖 図鑑画面へ", key="zukan_btn"):
+            if st.button("📖 キャラ図鑑", key="zukan_btn", use_container_width=True):
                 go_to("zukan")
-
+        st.markdown("---")
+        if st.button("↩️ ログアウト" , type="tertiary"):
+            sign_out()
+            st.rerun()
+                
         # ボタンデザイン
         st.markdown(
             """
             <style>
             div.stButton > button:first-child {
-                height: 180px;
+                height: 80px;
                 width: 100%;
                 font-size: 36px;
                 font-weight: bold;
@@ -616,6 +671,7 @@ def main_app():
             """,
             unsafe_allow_html=True
         )
+        
 
     # --- スキャン画面 ---
     elif st.session_state.page == "scan":
@@ -729,13 +785,22 @@ def main_app():
                 # 5) モデル種類によって関数を切り替え
                 with st.spinner("キャラクターを生成中..."):
                     if model_type == "レトロで企業らしい雰囲気":
-                        prompt, name, image = generate_character_image_openai(product_json)
+                        prompt, name, image,combat_power = generate_character_image_openai(product_json)
                     else:
-                        prompt, name, image = generate_character_image_stability(product_json)
+                        prompt, name, image,combat_power = generate_character_image_stability(product_json)
                 
                 if prompt and name and image:
                     st.session_state.character_generated = True
-                    st.rerun()
+                    st.session_state.generated_character = {
+                        "name": name,
+                        "image": image,
+                        "prompt": prompt,
+                        "region": st.session_state.todoufuken,
+                        "barcode": st.session_state["last_product_json"]["codeNumber"],
+                        "item_name": st.session_state["last_product_json"]["itemName"],
+                        "combat_power": combat_power,  # ← ここに保存
+            }
+                    
                 
 
             # キャラクターが生成済みの場合、表示と保存ボタンを表示
@@ -750,6 +815,7 @@ def main_app():
                     st.write(f"**名前**: {character_info.get('name', '名前不明')}")
                     st.write(f"**居住地**: {character_info.get('region', '')}")
                     st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
+                    st.write(f"**戦闘力**：{character_info.get('combat_power', 'N/A')}")
                     st.markdown(
                         '<span style="font-size:0.8em; color:gray;">※図鑑に保存するとステータスが表示されます。</span>',
                         unsafe_allow_html=True
@@ -839,7 +905,6 @@ def main_app():
                     
                     with col2:
                         st.write(f"**バーコード**: {char.get('code_number', 'N/A')}")
-                        
                         if char.get('character_parameter'):
                             params = char['character_parameter']
                             if isinstance(params, dict):
@@ -855,9 +920,7 @@ def main_app():
         if st.button("⬅️ メイン画面へ戻る"):
             go_to("main")
 
-    if st.sidebar.button("ログアウト"):
-        sign_out()
-        st.rerun()
+
 
 #　アプリケーション全体の流れを制御する
 
