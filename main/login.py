@@ -676,10 +676,7 @@ def main_app():
     # --- 生成画面 ---
     elif st.session_state.page == "scan":
                 
-        if st.button("⬅️ メイン画面へ戻る"):
-            go_to("main")
-        st.markdown("---")
-        st.title("🎨 キャラ生成")
+        st.title("🎨 キャラ生成！")
         img_file = st.camera_input("JANコードを撮影してください")
 
         digits, result = None, None
@@ -886,7 +883,7 @@ def main_app():
 
 # --- 図鑑画面 ---
     elif st.session_state.page == "zukan":
-        st.title("📖 図鑑（完全統一版）")
+        st.title("📖 キャラ図鑑！")
         
         # データベースからキャラクター一覧を取得（完全統一版）
         db_characters = get_user_characters_unified()
