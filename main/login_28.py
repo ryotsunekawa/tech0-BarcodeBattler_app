@@ -1,7 +1,7 @@
 import os, io, re, json, base64, zipfile, random, time
 from PIL import Image #画像ファイルを使用する（バーコード読み込み時や画像生成時）
 import streamlit as st #streamlitを使う
-from pyzbar.pyzbar import decode # import zxingcpp から変更。(pythonでしか使用しないため)
+# from pyzbar.pyzbar import decode # import zxingcpp から変更。(pythonでしか使用しないため)
 from supabase import create_client, AuthApiError #supabaseを使う
 #open aiを使う
 from openai import OpenAI
@@ -157,7 +157,6 @@ def upload_character_image_to_storage(image: Image, character_name: str, barcode
         
         # パブリックURLを取得（文字列として直接返される）
         public_url = supabase.storage.from_('character-images').get_public_url(filename)
-        st.success(f"✅ 画像アップロード成功: {character_name}")
         
         return public_url
             
@@ -229,7 +228,7 @@ def save_character_to_db_unified(character_data: dict, character_image: Image = 
         
         
         if response.data:
-            st.success("🎉 キャラクターを図鑑に保存しました！")
+            
             return True
         else:
             st.error("キャラクター保存に失敗しました")
@@ -259,8 +258,8 @@ def get_user_characters_unified():
         return []
 
 
-# 画像生成する関数
-def generate_character_image(product_json):
+# 画像生成する関数stabilityai
+def generate_character_image_stability(product_json):
     # 1. 商品情報取得
 
     # 2. OpenAIでプロンプト生成
@@ -398,6 +397,93 @@ def generate_character_image(product_json):
         return None, None, None
 
 
+
+# 画像生成する関数OPENAI
+def generate_character_image_openai(product_json):
+    region = st.session_state.todoufuken
+    if not region:
+        st.error("都道府県を選択してください")
+        return None, None, None
+
+    # 1. キャラクター名を生成（テキストモデル）
+    try:
+        name_prompt = f"""
+        次の商品をモチーフにしたキャラクターを考えてください。
+        商品名: {product_json['itemName']}
+        メーカー: {product_json['makerName']}
+        商品画像URL: {product_json['itemImageUrl']}
+
+
+        条件:
+        - キャラクターに合う短く覚えやすい名前
+        - カタカナで8文字以内
+        - 出力は次の形式にしてください
+        Character Name: <ここにキャラクター名>
+        """
+        name_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": name_prompt}],
+            max_tokens=20
+        )
+        character_name_text = name_response.choices[0].message.content.strip()
+
+        # Character Name: の部分を抽出
+        if "Character Name:" in character_name_text:
+            character_name = character_name_text.split(":", 1)[1].strip()
+        else:
+            character_name = f"キャラ{random.randint(1000,9999)}"
+
+    except Exception as e:
+        st.warning(f"キャラクター名生成に失敗しました: {str(e)}")
+        character_name = f"キャラ{random.randint(1000,9999)}"
+
+    # 2. 画像生成プロンプト
+    sd_prompt = f"""
+    商品「{product_json['itemName']}」情報をもとに、バーコードバトラー風に擬人化したキャラクターを描いてください。
+    キャラクター名は「{character_name}」です。
+    キャラクターはレトロなカードバトルゲーム風イラストとして表現してください。
+    キャラクターには商品画像（ {product_json['itemImageUrl']} ）のイメージを反映させてください。
+
+    以下の要素を必ず含めてください：
+    - **性格**：キャラクターの性格を具体的に描写（例：勇敢で元気、清潔感がある、戦闘好きなど）
+    - **服装**：RPGキャラクター風の衣装。商品名を連想させるデザインを取り入れる
+    - **小物・持ち物**：商品名をモチーフにしたデフォルメ武器・防具を装備
+    - **姿勢**：カードバトルゲーム風の構え
+    - **背景**：{region} の特徴（自然や建物、雰囲気など）を取り入れた、カードゲーム用イラスト風背景。
+    - **演出**：戦闘力や特殊技を発動しそうなエフェクト（光、オーラ、数字的な力を感じさせる演出）
+    - **出力画像**：画像は1024x1024の正方形になるようにしてください。
+    """
+
+    # 3. 画像生成（OpenAI Image API）
+    try:
+        image_response = client.images.generate(
+            model="gpt-image-1",
+            prompt=sd_prompt,
+            size="1024x1024"
+        )
+
+        image_base64 = image_response.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
+        image = Image.open(BytesIO(image_bytes))
+
+        # セッション状態に保存
+        st.session_state.generated_character = {
+            'prompt': sd_prompt,
+            'name': character_name,
+            'image': image,
+            'barcode': product_json['codeNumber'],
+            'item_name': product_json['itemName'],
+            'region': region
+        }
+
+        return sd_prompt, character_name, image
+
+    except Exception as e:
+        st.error(f"キャラクター生成エラー: {str(e)}")
+        return None, None, None
+
+
+
 # メイン画面に戻る関数
 def go_to(page_name):
     st.session_state.page = page_name
@@ -491,8 +577,6 @@ def main_app():
     # プロフィール情報表示
     if 'user_profile' in st.session_state and st.session_state.user_profile:
         name_to_display = st.session_state.user_profile.get("user_name", st.session_state.user.email)
-        # ユーザー情報をサイドバーに表示
-        st.sidebar.success(f"👋 {name_to_display}さん、こんにちは")
         
     
     else:
@@ -506,8 +590,8 @@ def main_app():
 
     # --- メイン画面 ---
     if st.session_state.page == "main":
-        st.title("📚 バーコードキャラクター図鑑")
-        st.write("遊び方を選んでください")
+        st.title("バーコードバトラー 〜Tech0 Edition〜")
+        st.write(f"{name_to_display}さん、こんにちは！遊び方を選んでください")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -544,7 +628,7 @@ def main_app():
             img = Image.open(io.BytesIO(img_file.getvalue()))
         
             #pyzbar でデコード
-            results = decode(img)
+            # results = decode(img)
         
             if results:
                 # 複数バーコードがある場合は最初のものを使う
@@ -581,6 +665,14 @@ def main_app():
         ]
         selected_pref = st.selectbox("都道府県を選択", prefectures, index=12 ,key="todoufuken")
 
+        # モデルの種類選択フォームを追加
+        model_type = st.selectbox(
+            "キャラクターイメージ",
+            ["カラフルで個性的な雰囲気", "レトロで企業らしい雰囲気"],
+            index=0,
+            key="model_type"
+        )
+
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
             # 生成ボタン
@@ -609,7 +701,7 @@ def main_app():
                         "name": "テックの妖精",
                         "image": "https://lkhbqezbsjojrlmhnuev.supabase.co/storage/v1/object/public/character-images/chatgpt_%20Image_2025_9_28_%2023_59_31.png",
                         "region": "不明",
-                        "prompt": "エラーをしたときに現れる妖精。エラーをしても気にするな。"
+                        "prompt": "エラーをしたときに現れる妖精。出る杭最高卍"
                     }
                     
                     st.info("該当商品がデータベースに無い可能性があります！デフォルトキャラを召喚！")
@@ -632,14 +724,16 @@ def main_app():
                 st.session_state["last_product_json"] = product_json
                 st.success(f"🎉 JANコードの読み込み完了！")
 
-                # 5) 生成
+                # 5) モデル種類によって関数を切り替え
                 with st.spinner("キャラクターを生成中..."):
-                    prompt, name, image = generate_character_image(product_json)
+                    if model_type == "レトロで企業らしい雰囲気":
+                        prompt, name, image = generate_character_image_openai(product_json)
+                    else:
+                        prompt, name, image = generate_character_image_stability(product_json)
                 
                 if prompt and name and image:
-                    # 生成成功時は生成フラグを立てる
                     st.session_state.character_generated = True
-                    st.rerun()  # ページを再読み込みして保存ボタンを表示
+                    st.rerun()
                 
 
             # キャラクターが生成済みの場合、表示と保存ボタンを表示
@@ -654,6 +748,10 @@ def main_app():
                     st.write(f"**名前**: {character_info.get('name', '名前不明')}")
                     st.write(f"**居住地**: {character_info.get('region', '')}")
                     st.write(f"""**所属先**: {st.session_state['last_product_json']['makerName']}""")
+                    st.markdown(
+                        '<span style="font-size:0.8em; color:gray;">※図鑑に保存するとステータスが表示されます。</span>',
+                        unsafe_allow_html=True
+                    )
 
 
                 with st.expander("🔍 JANコード詳細"):
@@ -692,8 +790,7 @@ def main_app():
                                 'region': character_info['region'],
                                 'power': character_data['character_parameter']['power']
                             })
-                            st.success("🎉 図鑑に登録されました！")
-                            st.info("💫 画像もSupabaseストレージに保存されました")
+                            st.success("🎉 キャラクターを図鑑に保存しました！")
                             
                             # 生成フラグをリセット
                             st.session_state.character_generated = False
@@ -712,7 +809,7 @@ def main_app():
             go_to("main")
                     
                     
-    # --- 図鑑画面 ---
+
 # --- 図鑑画面 ---
     elif st.session_state.page == "zukan":
         st.title("📖 図鑑（完全統一版）")
@@ -722,7 +819,6 @@ def main_app():
         
         if db_characters:
             st.write(f"**登録済みキャラクター数**: {len(db_characters)}体")
-            st.info("💡 Auth UID = DB user_id で管理されています")
             
             for idx, char in enumerate(db_characters, start=1):
                 with st.expander(f"{idx}. {char.get('character_name', '無名キャラ')} - {char.get('item_name', '不明アイテム')}"):
@@ -741,7 +837,6 @@ def main_app():
                     
                     with col2:
                         st.write(f"**バーコード**: {char.get('code_number', 'N/A')}")
-                        st.write(f"**ユーザーID**: {char.get('user_id', 'N/A')[:8]}...（Auth UID）")
                         
                         if char.get('character_parameter'):
                             params = char['character_parameter']
@@ -750,9 +845,6 @@ def main_app():
                                 for key, value in params.items():
                                     if key in ['power', 'attack', 'defense', 'speed']:
                                         st.write(f"- {key}: {value}")
-                                    elif key == 'region':
-                                        st.write(f"**出身地**: {value}")
-                        
                         st.write(f"**作成日**: {char.get('created_at', 'N/A')}")
         else:
             st.info("まだキャラクターがいません。スキャンしてみましょう！")
