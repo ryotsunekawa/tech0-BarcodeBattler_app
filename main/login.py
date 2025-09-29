@@ -652,7 +652,7 @@ def main_app():
             if st.button("📖 キャラ図鑑", key="zukan_btn", use_container_width=True):
                 go_to("zukan")
         st.markdown("---")
-        if st.button("↩️ ログアウト" , type="tertiary"):
+        if st.button("↩️ ログアウト"):
             sign_out()
             st.rerun()
                 
